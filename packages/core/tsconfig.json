@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Referenced by every other package. `composite` is what lets them consume
+    // core's declarations without dragging its sources into their own program,
+    // which would put core's files outside their rootDir.
+    "composite": true
+  },
+  "include": ["src/**/*.ts"]
+}
