@@ -1,0 +1,43 @@
+full_name,company,postal_address,email,signup_date
+Ahad Hossain,Cobalt Research,"12 Mirpur Rd, Dhaka",ahadxx99@gmail.com,2026-01-14
+"Doe, Jane",Microsoft,"1 Microsoft Way, Redmond",jane.doe@microsoft.com,2026-01-15
+Kenji Tanaka,Sony,"3-1 Minato, Tokyo",k.tanaka@yahoo.co.jp,2026-01-15
+Sam Patel,Vercel,"San Francisco, CA",dev@vercel.com,2026-01-16
+Lina Faruk,,"Chittagong",someone@outlook.com,2026-01-16
+Ahad Hossain,Cobalt Research,"12 Mirpur Rd, Dhaka",ahad.xx99@gmail.com,2026-01-17
+Ahad Hossain,Cobalt Research,"12 Mirpur Rd, Dhaka",AhadXX99+newsletter@Gmail.COM,2026-01-17
+John Doe,Acme,"221B Baker St, London",j.doe+shop@googlemail.com,2026-01-18
+John Doe,Acme,"221B Baker St, London",jdoe@gmail.com,2026-01-18
+GitHub Admin,GitHub,"88 Colin P Kelly Jr St",admin@github.com,2026-01-19
+Stripe Info,Stripe,"510 Townsend St",info@stripe.com,2026-01-19
+Cloudflare Support,Cloudflare,"101 Townsend St",support@cloudflare.com,2026-01-20
+Amazon Noreply,Amazon,"410 Terry Ave N",noreply@amazon.com,2026-01-20
+Temp Signup,,"",throwaway@mailinator.com,2026-01-21
+Burner Account,,"",burner@yopmail.com,2026-01-21
+Guerrilla Tester,,"",temp@guerrillamail.com,2026-01-22
+Ten Minute,,"",test@10minutemail.com,2026-01-22
+Typo One,,"Sylhet",contact@gmial.com,2026-01-23
+Typo Two,,"Khulna",hello@yaho.com,2026-01-23
+Typo Three,,"Rajshahi",sales@hotmial.com,2026-01-24
+Typo Four,,"Barisal",me@outlok.com,2026-01-24
+Ghost Domain,Nowhere Ltd,"",user@this-domain-should-not-exist-9f83kd.com,2026-01-25
+IANA Example,IANA,"",user@example.com,2026-01-25
+Munich Buyer,,"München",user@münchen.de,2026-01-26
+Book Shop,,"Berlin",info@bücher.de,2026-01-26
+Padded Entry,,"Comilla",  Padded.User@Proton.ME  ,2026-01-27
+Angle Bracket Export,,"Rangpur",Ahad Hossain <ahad@cobalt-research.com>,2026-01-27
+Quoted Local,,"","""weird name""@github.com",2026-01-28
+Yahoo User,,"Dhaka",user@yahoo.com,2026-01-28
+"Ahad ""Bulu"" Rahman",Cobalt Research,"12 Mirpur Rd, Dhaka",bulu@fastmail.com,2026-01-29
+
+No At Sign,,"",not-an-email,2026-01-30
+Double At,,"",two@@example.com,2026-01-30
+Leading Dot,,"",.leading@example.com,2026-01-31
+Trailing Dot,,"",trailing.@example.com,2026-01-31
+Inner Space,,"",no space@example.com,2026-02-01
+Single Label,,"",user@localhost,2026-02-01
+IP Literal,,"",user@192.168.1.10,2026-02-02
+Empty Label,,"",user@example..com,2026-02-02
+Hyphen Start,,"",user@-example.com,2026-02-03
+Bad TLD,,"",user@example.123,2026-02-03
+Blank Cell,,"Dhaka",,2026-02-04
