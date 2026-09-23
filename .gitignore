@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.next/
+*.tsbuildinfo
+
+# job data — email rows never go in git
+data/
+*.local
+.env
+.env.*

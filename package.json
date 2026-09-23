@@ -1,0 +1,19 @@
+{
+  "name": "email-validator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -b packages/core packages/db packages/pipeline",
+    "test": "pnpm -r test",
+    "// typecheck": "packages are project references, so their declarations must exist before dependents can be checked",
+    "typecheck": "pnpm run build && pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.7.3"
+  }
+}
