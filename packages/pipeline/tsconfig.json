@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "composite": true
+  },
+  // A project reference rather than a `paths` mapping: the mapping pulled
+  // core's source files into this program, where they sit outside `rootDir`
+  // and the compiler rightly complains. References give us the same "a change
+  // in core breaks this package immediately" behaviour via its declarations.
+  "references": [{ "path": "../core" }],
+  "include": ["src/**/*.ts"]
+}
