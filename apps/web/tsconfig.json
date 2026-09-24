@@ -1,0 +1,51 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Next bundles the app, so resolution and module format come from the
+    // bundler rather than Node's own rules that the base config assumes.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "allowJs": true,
+    "incremental": true,
+    "resolveJsonModule": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    // The workspace packages are consumed straight from source. Without this
+    // the app could not typecheck until @ev/core and @ev/db had been built,
+    // which would make every change a two-step build.
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@ev/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@ev/db": [
+        "../../packages/db/src/index.ts"
+      ]
+    },
+    "esModuleInterop": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

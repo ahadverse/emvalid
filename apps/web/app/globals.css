@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/**
+ * One palette, light only.
+ *
+ * The ground is off-white rather than white, and cards on top of it are white.
+ * That is the whole structure of the design: nothing needs a shadow to read as
+ * raised, because it is already lighter than the page under it. A pure-white
+ * canvas would collapse that distinction and force every card to earn its
+ * edges with a border and a drop shadow instead.
+ *
+ * There is no dark rendering and no `dark:` variant anywhere in the app. If one
+ * is ever wanted, it belongs here — as a second set of values for these same
+ * tokens — and nowhere else.
+ */
+@theme {
+  /* Surfaces, in the order they stack. `sunken` is for wells inside a card —
+     table headers, code blocks, drop zones — and is the only one that goes
+     darker than the canvas. */
+  --color-canvas: oklch(98.2% 0.0035 85);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-sunken: oklch(96.6% 0.0045 85);
+  --color-surface-raised: oklch(100% 0 0);
+
+  --color-line-subtle: oklch(94.5% 0.005 85);
+  --color-line: oklch(91.5% 0.006 85);
+  --color-line-strong: oklch(85% 0.008 85);
+
+  --color-ink: oklch(21% 0.013 265);
+  --color-ink-muted: oklch(46% 0.013 262);
+  --color-ink-subtle: oklch(61% 0.012 262);
+
+  --color-accent: oklch(51% 0.18 262);
+  --color-accent-hover: oklch(45% 0.18 262);
+  --color-accent-ink: oklch(100% 0 0);
+  --color-accent-soft: oklch(96% 0.026 262);
+  --color-accent-line: oklch(87% 0.065 262);
+
+  /* Status colours. Deliberately four, matching core's `Status` union. The
+     `-soft` weights sit behind body text, so they stay above 95% lightness. */
+  --color-good: oklch(50% 0.135 155);
+  --color-good-soft: oklch(96% 0.038 155);
+  --color-bad: oklch(53% 0.19 25);
+  --color-bad-soft: oklch(96% 0.032 25);
+  --color-warn: oklch(55% 0.135 68);
+  --color-warn-soft: oklch(96% 0.048 85);
+  --color-mute: oklch(53% 0.02 262);
+  --color-mute-soft: oklch(96% 0.006 262);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* Shadows are tinted with the ink hue rather than pure black — a neutral
+     black shadow on a warm ground reads as grey dirt under the card. */
+  --shadow-card: 0 1px 2px oklch(21% 0.013 265 / 0.05);
+  --shadow-raised:
+    0 1px 2px oklch(21% 0.013 265 / 0.05), 0 8px 24px -8px oklch(21% 0.013 265 / 0.1);
+  --shadow-pop:
+    0 4px 8px -2px oklch(21% 0.013 265 / 0.06), 0 16px 40px -12px oklch(21% 0.013 265 / 0.14);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-rise: rise 0.4s var(--ease-out-soft) both;
+  --animate-fade: fade 0.25s var(--ease-out-soft) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-ping-slow: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: -180% 0;
+    }
+    to {
+      background-position: 180% 0;
+    }
+  }
+
+  @keyframes ping-slow {
+    75%,
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+}
+
+@layer base {
+  html {
+    /* Form controls, scrollbars and the browser's own chrome all read this.
+       Without it a user whose OS is in dark mode gets dark native selects on a
+       white page. */
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One ring, everywhere, and it never gets removed — a keyboard user who
+     cannot see where they are is a keyboard user who cannot use the page. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  /* Numbers in tables must line up column-wise or a breakdown is unreadable. */
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+
+  * {
+    scrollbar-color: var(--color-line-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer utilities {
+  /**
+   * The faint engineering grid behind page headers. Two gradients rather than
+   * an image so it costs no request, and masked to nothing at the edges so it
+   * never reads as a hard-edged box.
+   */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--color-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 0%, #000 20%, transparent 78%);
+  }
+
+  /** Placeholder blocks while server data is in flight. */
+  .shimmer {
+    background-image: linear-gradient(
+      90deg,
+      var(--color-surface-sunken) 0%,
+      var(--color-line) 45%,
+      var(--color-surface-sunken) 90%
+    );
+    background-size: 220% 100%;
+    animation: var(--animate-shimmer);
+  }
+
+  /**
+   * Long code samples and wide tables scroll inside their own box. Without
+   * this a 90-character curl line makes the entire page scroll sideways on a
+   * phone, which is the single most common way a good layout breaks.
+   */
+  .scroll-x {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+}
+
+/**
+ * Everything above animates for effect, not for meaning, so all of it can be
+ * switched off without losing information.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
