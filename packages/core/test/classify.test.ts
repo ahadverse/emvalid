@@ -109,7 +109,7 @@ describe('classify — risky', () => {
 
 describe('classify — unknown is the honest default', () => {
   it('never returns deliverable without SMTP, however good the domain looks', () => {
-    const result = check('ahad@gmail.com', domain({
+    const result = check('ahad.hossain@gmail.com', domain({
       domain: 'gmail.com',
       mx: ['gmail-smtp-in.l.google.com'],
       provider: 'google',
@@ -139,7 +139,7 @@ describe('classify — advice is what to do, status is what we proved', () => {
   it('recommends sending when every check passed, though status stays unknown', () => {
     // The whole reason `advice` exists: "unknown" as a headline reads as
     // "we found nothing" when the finding is "we found nothing wrong".
-    const result = check('ahad@gmail.com', domain({ domain: 'gmail.com', provider: 'google' }));
+    const result = check('ahad.hossain@gmail.com', domain({ domain: 'gmail.com', provider: 'google' }));
     assert.equal(result.advice, 'send');
     assert.equal(result.status, 'unknown');
   });

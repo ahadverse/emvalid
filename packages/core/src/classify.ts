@@ -3,6 +3,7 @@ import { checkSyntax, type SyntaxBad } from './syntax.ts';
 import { isDisposable } from './policy/disposable.ts';
 import { isFreeProvider } from './policy/free-providers.ts';
 import { isRoleAccount } from './policy/role.ts';
+import { checkProviderUsernameRules, type ProviderRuleViolation } from './policy/provider-rules.ts';
 import { suggestDomain } from './policy/typo.ts';
 import type { Advice, DomainInfo, EmailResult, ReasonCode, Status } from './types.ts';
 
@@ -32,6 +33,8 @@ export interface ParsedEmail {
   freeProvider: boolean;
   alias: boolean;
   suggestion: string | null;
+  /** Feature 64 — set only for gmail.com/googlemail.com, null everywhere else. */
+  providerRuleViolation: ProviderRuleViolation | null;
 }
 
 /**
@@ -60,6 +63,7 @@ export function parseEmail(input: string): ParsedEmail {
       freeProvider: false,
       alias: false,
       suggestion: null,
+      providerRuleViolation: null,
     };
   }
 
@@ -79,6 +83,7 @@ export function parseEmail(input: string): ParsedEmail {
       freeProvider: false,
       alias: false,
       suggestion: null,
+      providerRuleViolation: null,
     };
   }
 
@@ -98,6 +103,7 @@ export function parseEmail(input: string): ParsedEmail {
       suggestion === null
         ? null
         : `${parts.localPart.toLowerCase()}@${suggestion.domain}`,
+    providerRuleViolation: checkProviderUsernameRules(parts.domain, parts.localPart),
   };
 }
 
@@ -151,7 +157,21 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 2. DNS trouble outranks every domain-level verdict below, because those
+  // 2. Feature 64 — a username Gmail itself would reject. Cheap, string-only,
+  //    and undeliverable regardless of what DNS says, so it runs before DNS
+  //    trouble gets a chance to mask it behind a retry.
+  if (parsed.providerRuleViolation !== null) {
+    return {
+      status: 'undeliverable',
+      advice: 'do_not_send',
+      confidence: 98,
+      reason: 'provider_rules_invalid',
+      detail: parsed.providerRuleViolation.detail,
+      retryable: false,
+    };
+  }
+
+  // 3. DNS trouble outranks every domain-level verdict below, because those
   //    verdicts are all read off DNS data we do not have. Feature 7 lives or
   //    dies here: this must never fall through to "no mail server".
   if (domain?.error != null) {
@@ -169,7 +189,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
   }
 
   if (domain !== null) {
-    // 3. The domain itself does not exist. Nothing sent here can arrive.
+    // 4. The domain itself does not exist. Nothing sent here can arrive.
     if (domain.nxdomain) {
       return {
         status: 'undeliverable',
@@ -181,7 +201,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
       };
     }
 
-    // 4. RFC 7505 null MX — the domain states outright that it takes no mail.
+    // 5. RFC 7505 null MX — the domain states outright that it takes no mail.
     if (domain.nullMx) {
       return {
         status: 'undeliverable',
@@ -193,7 +213,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
       };
     }
 
-    // 5. Domain resolves, but there is nowhere to deliver: no MX and no
+    // 6. Domain resolves, but there is nowhere to deliver: no MX and no
     //    address record to fall back on.
     if (domain.mx.length === 0 && !domain.hasAddressRecord) {
       return {
@@ -207,7 +227,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     }
   }
 
-  // 6. Burner address. Deliverable today, gone next week, and it belongs to
+  // 7. Burner address. Deliverable today, gone next week, and it belongs to
   //    nobody — the strongest risky signal we have.
   if (parsed.disposable) {
     return {
@@ -220,7 +240,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 7. Looks like a mistyped domain. Ranked above role because if the domain
+  // 8. Looks like a mistyped domain. Ranked above role because if the domain
   //    is wrong, nothing else about the address matters.
   if (parsed.suggestion !== null) {
     return {
@@ -235,7 +255,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 8. Shared or automated inbox. Usually deliverable, always a bad send.
+  // 9. Shared or automated inbox. Usually deliverable, always a bad send.
   if (parsed.role) {
     return {
       status: 'risky',
@@ -249,7 +269,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 9. Everything checks out and we still do not know if the mailbox exists.
+  // 10. Everything checks out and we still do not know if the mailbox exists.
   //    For `unknown`, confidence reads as "how likely mail would be accepted"
   //    — a prior from the domain evidence, not a claim about the mailbox.
   if (domain === null) {

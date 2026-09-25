@@ -36,8 +36,8 @@ describe('EmailValidator', () => {
       info('gmail.com', { mx: ['gmail-smtp-in.l.google.com'], provider: 'google' }),
     ]);
 
-    const result = await validator.validate('Ahad@Gmail.com');
-    assert.equal(result.normalized, 'ahad@gmail.com');
+    const result = await validator.validate('Ahad.Hossain@Gmail.com');
+    assert.equal(result.normalized, 'ahad.hossain@gmail.com');
     assert.equal(result.status, 'unknown');
     assert.equal(result.flags.mxProvider, 'google');
     assert.equal(validator.resolver.stats.cacheHits, 1);
@@ -104,8 +104,8 @@ describe('SummaryBuilder', () => {
       info('mailinator.com'),
     ]);
     const results = await validator.validateMany([
-      'ahad@gmail.com',
-      'info@gmail.com',
+      'ahad.hossain@gmail.com',
+      'support@gmail.com',
       'broken',
       'someone@mailinator.com',
     ]);

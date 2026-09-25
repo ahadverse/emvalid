@@ -46,6 +46,9 @@ export type Advice =
 export type ReasonCode =
   // --- undeliverable (certain) ---
   | 'syntax_invalid'
+  // Feature 64. Not merged with `syntax_invalid`'s 100% — this is a provider
+  // policy read off a publicly documented rule, not the address format itself.
+  | 'provider_rules_invalid'
   | 'domain_not_found'
   | 'domain_no_mail_server'
   | 'domain_null_mx'
