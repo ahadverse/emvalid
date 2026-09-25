@@ -1,5 +1,6 @@
 import type { ParsedEmail } from './classify.ts';
 import { isQuoted } from './normalize.ts';
+import { isDisposableMx } from './policy/disposable.ts';
 import { isGmailDomain } from './policy/provider-rules.ts';
 import type { DomainInfo } from './types.ts';
 
@@ -78,7 +79,7 @@ export function explain(parsed: ParsedEmail, domain: DomainInfo | null): Check[]
     providerRulesCheck(parsed, syntaxOk),
     typoCheck(parsed, syntaxOk),
     roleCheck(parsed, syntaxOk),
-    disposableCheck(parsed, syntaxOk),
+    disposableCheck(parsed, syntaxOk, domain),
     freeProviderCheck(parsed, syntaxOk),
     dnsCheck(domain, syntaxOk),
     mxProviderCheck(domain),
@@ -263,15 +264,14 @@ function roleCheck(parsed: ParsedEmail, syntaxOk: boolean): Check {
   };
 }
 
-function disposableCheck(parsed: ParsedEmail, syntaxOk: boolean): Check {
-  if (!syntaxOk) {
-    return skipped('disposable', 'Disposable address (DEA) validation', SYNTAX_BLOCKED);
-  }
+function disposableCheck(parsed: ParsedEmail, syntaxOk: boolean, domain: DomainInfo | null): Check {
+  const title = 'Disposable address (DEA) validation';
+  if (!syntaxOk) return skipped('disposable', title, SYNTAX_BLOCKED);
 
   if (parsed.disposable) {
     return {
       id: 'disposable',
-      title: 'Disposable address (DEA) validation',
+      title,
       outcome: 'fail',
       detail:
         'The domain belongs to a known disposable mail provider. Addresses there are handed out to get past a signup form and stop working within days.',
@@ -279,12 +279,30 @@ function disposableCheck(parsed: ParsedEmail, syntaxOk: boolean): Check {
     };
   }
 
+  // Feature 65. A domain not on the seed list can still route its mail
+  // through a backend that serves nothing but disposable inboxes — Burner
+  // Mail and Mailsac both let anyone point their own domain there.
+  const mxChecked = domain !== null && domain.error == null;
+  if (mxChecked && isDisposableMx(domain.mx)) {
+    return {
+      id: 'disposable',
+      title,
+      outcome: 'fail',
+      detail:
+        'The domain itself is not on the disposable list, but its mail exchanger belongs to a backend that serves nothing but disposable mail.',
+      facts: [
+        { label: 'Mail exchanger', value: domain.mx.find((host) => isDisposableMx([host])) ?? '', mono: true },
+      ],
+    };
+  }
+
   return {
     id: 'disposable',
-    title: 'Disposable address (DEA) validation',
+    title,
     outcome: 'pass',
-    detail:
-      'The domain is not on the disposable / temporary provider list, so the address is not a throwaway by design.',
+    detail: mxChecked
+      ? 'The domain is not on the disposable / temporary provider list, and its mail exchanger is not a known disposable-mail backend.'
+      : 'The domain is not on the disposable / temporary provider list.',
     facts: [],
   };
 }

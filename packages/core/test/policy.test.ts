@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { isRoleAccount } from '../src/policy/role.ts';
 import { isFreeProvider } from '../src/policy/free-providers.ts';
-import { DisposableRegistry, isDisposable } from '../src/policy/disposable.ts';
+import { DisposableRegistry, isDisposable, isDisposableMx } from '../src/policy/disposable.ts';
 import { damerauLevenshtein, suggestDomain } from '../src/policy/typo.ts';
 import { detectMxProvider, smtpProbeIsUseless } from '../src/policy/mx-provider.ts';
 
@@ -37,7 +37,7 @@ describe('isFreeProvider', () => {
   });
 
   it('does not flag company domains', () => {
-    assert.equal(isFreeProvider('stripe.com'), false);
+    assert.equal(isFreeProvider('anthropic.com'), false);
   });
 });
 
@@ -65,6 +65,31 @@ describe('disposable', () => {
   });
 });
 
+describe('isDisposableMx', () => {
+  it('catches a brand-new domain routed through a known burner backend', () => {
+    assert.equal(isDisposableMx(['mail.mailinator.com']), true);
+    assert.equal(isDisposableMx(['mail.burnermail.io']), true);
+  });
+
+  it('matches a subdomain of the burner backend, not just the exact host', () => {
+    assert.equal(isDisposableMx(['mx7.mailsac.com']), true);
+  });
+
+  it('never matches shared infrastructure, however popular with burner sites', () => {
+    for (const host of ['aspmx.l.google.com', 'route1.mx.cloudflare.net', 'mxa.mailgun.org']) {
+      assert.equal(isDisposableMx([host]), false, host);
+    }
+  });
+
+  it('does not match a real domain that merely ends similarly', () => {
+    assert.equal(isDisposableMx(['mail.notmailinator.com']), false);
+  });
+
+  it('returns false for an empty MX list', () => {
+    assert.equal(isDisposableMx([]), false);
+  });
+});
+
 describe('suggestDomain', () => {
   it('fixes the classic misspellings', () => {
     assert.equal(suggestDomain('gmial.com')?.domain, 'gmail.com');
@@ -85,7 +110,7 @@ describe('suggestDomain', () => {
   });
 
   it('leaves unrelated company domains alone', () => {
-    for (const domain of ['stripe.com', 'mycompany.io', 'dis-bd.com', 'shopify.com']) {
+    for (const domain of ['anthropic.com', 'mycompany.io', 'dis-bd.com', 'shopify.com']) {
       assert.equal(suggestDomain(domain), null, domain);
     }
   });

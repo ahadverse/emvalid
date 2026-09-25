@@ -84,6 +84,27 @@ describe('classify — risky', () => {
     assert.equal(result.flags.disposable, true);
   });
 
+  it('disposable by mail exchanger — a domain not on any list, routed through a burner backend', () => {
+    const result = check('someone@brand-new-burner.example', domain({
+      domain: 'brand-new-burner.example',
+      mx: ['mail.burnermail.io'],
+      provider: null,
+    }));
+    assert.equal(result.status, 'risky');
+    assert.equal(result.reason, 'disposable_domain');
+    assert.equal(result.flags.disposable, true);
+  });
+
+  it('does not flag a domain on ordinary shared mail infrastructure as disposable', () => {
+    const result = check('someone@a-real-company.example', domain({
+      domain: 'a-real-company.example',
+      mx: ['aspmx.l.google.com'],
+      provider: 'google',
+    }));
+    assert.notEqual(result.reason, 'disposable_domain');
+    assert.equal(result.flags.disposable, false);
+  });
+
   it('role account', () => {
     const result = check('info@example.com');
     assert.equal(result.status, 'risky');

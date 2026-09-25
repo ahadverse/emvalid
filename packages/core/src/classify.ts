@@ -1,6 +1,6 @@
 import { canonicalize, normalizeAddress, splitAddress, type SplitAddress } from './normalize.ts';
 import { checkSyntax, type SyntaxBad } from './syntax.ts';
-import { isDisposable } from './policy/disposable.ts';
+import { isDisposable, isDisposableMx } from './policy/disposable.ts';
 import { isFreeProvider } from './policy/free-providers.ts';
 import { isRoleAccount } from './policy/role.ts';
 import { checkProviderUsernameRules, type ProviderRuleViolation } from './policy/provider-rules.ts';
@@ -122,7 +122,7 @@ export function classify(parsed: ParsedEmail, domain: DomainInfo | null): EmailR
     suggestion: parsed.suggestion,
     flags: {
       role: parsed.role,
-      disposable: parsed.disposable,
+      disposable: isDisposableAddress(parsed, domain),
       freeProvider: parsed.freeProvider,
       idn: parsed.parts?.idn ?? false,
       alias: parsed.alias,
@@ -132,6 +132,15 @@ export function classify(parsed: ParsedEmail, domain: DomainInfo | null): EmailR
 
   const verdict = decide(parsed, domain);
   return { ...base, ...verdict };
+}
+
+/**
+ * Feature 65 — disposable by domain name (feature 8) or by mail exchanger.
+ * Shared so the flag on the result and the verdict below never disagree.
+ */
+function isDisposableAddress(parsed: ParsedEmail, domain: DomainInfo | null): boolean {
+  if (parsed.disposable) return true;
+  return domain !== null && domain.error == null && isDisposableMx(domain.mx);
 }
 
 interface Verdict {
@@ -228,8 +237,10 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
   }
 
   // 7. Burner address. Deliverable today, gone next week, and it belongs to
-  //    nobody — the strongest risky signal we have.
-  if (parsed.disposable) {
+  //    nobody — the strongest risky signal we have. Caught either by domain
+  //    name (feature 8) or, for a domain not on any list, by its mail
+  //    exchanger belonging to a disposable-only backend (feature 65).
+  if (isDisposableAddress(parsed, domain)) {
     return {
       status: 'risky',
       advice: 'do_not_send',

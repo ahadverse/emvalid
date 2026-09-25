@@ -81,6 +81,15 @@ describe('explain — policy', () => {
     assert.equal(find(report('a@mailinator.com'), 'disposable').outcome, 'fail');
   });
 
+  it('fails a domain not on any list when its MX is a known burner backend', () => {
+    const check = find(
+      report('a@brand-new-burner.example', domain({ domain: 'brand-new-burner.example', mx: ['mail.burnermail.io'] })),
+      'disposable',
+    );
+    assert.equal(check.outcome, 'fail');
+    assert.equal(check.facts.find((fact) => fact.label === 'Mail exchanger')?.value, 'mail.burnermail.io');
+  });
+
   it('a free provider is noted, not warned about', () => {
     // gmail.com is a fact about the address, not a reason to hold it back.
     // Amber here would push people to delete perfectly good consumer addresses.

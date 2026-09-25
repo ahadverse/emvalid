@@ -60,6 +60,57 @@ const SEED_SUFFIXES = [
   'temp-mail.org', 'tempr.email', 'nwytg.net', 'grr.la',
 ];
 
+/**
+ * Feature 65 — mail exchangers that serve disposable mail and nothing else.
+ *
+ * A brand-new domain name will never be on the seed list above, but several
+ * disposable services let anyone point their own domain's MX at the same
+ * backend and get disposable inboxes on it — Burner Mail and Mailsac both
+ * advertise exactly this. Catching the shared backend catches every domain
+ * built on it, seed list or not.
+ *
+ * Every host here was checked against live DNS before being added, and only
+ * kept if the domain that MX belongs to serves nothing but disposable mail.
+ * Shared infrastructure a real business could equally be running on —
+ * Google Workspace, Cloudflare Email Routing, Mailgun, ProtonMail — is never
+ * listed here: a false positive on one of those flags real companies as
+ * burner addresses, which is worse than missing a burner address.
+ */
+const DISPOSABLE_MX_SUFFIXES = [
+  'mailinator.com',
+  'guerrillamail.com', 'guerrillamailblock.com',
+  'yopmail.com',
+  'trashmail.com',
+  'dispostable.com',
+  'burnermail.io',
+  'maildrop.cc',
+  'mailsac.com',
+  'getnada.com',
+  'mailcatch.com',
+  'mintemail.com',
+  'dropmail.me',
+  'mailnesia.com',
+  'spamgourmet.com',
+  'spamex.com',
+  'harakirimail.com',
+  'mytrashmail.com',
+  'mailexpire.com',
+];
+
+/**
+ * Whether any MX host for the domain belongs to a disposable-only backend.
+ * Takes the hosts as looked up — no new DNS query, this reads the same MX
+ * records feature 5 already fetched.
+ */
+export function isDisposableMx(mxHosts: readonly string[]): boolean {
+  return mxHosts.some((host) => {
+    const value = host.toLowerCase().replace(/\.$/, '');
+    return DISPOSABLE_MX_SUFFIXES.some(
+      (suffix) => value === suffix || value.endsWith(`.${suffix}`),
+    );
+  });
+}
+
 export class DisposableRegistry {
   #exact: Set<string>;
   #suffixes: string[];
