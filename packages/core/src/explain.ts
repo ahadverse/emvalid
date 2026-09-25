@@ -1,5 +1,6 @@
 import type { ParsedEmail } from './classify.ts';
 import { isQuoted } from './normalize.ts';
+import { isGmailDomain } from './policy/provider-rules.ts';
 import type { DomainInfo } from './types.ts';
 
 /**
@@ -43,6 +44,7 @@ export interface CheckFact {
 export type CheckId =
   | 'syntax'
   | 'normalization'
+  | 'provider_rules'
   | 'typo'
   | 'role'
   | 'disposable'
@@ -73,6 +75,7 @@ export function explain(parsed: ParsedEmail, domain: DomainInfo | null): Check[]
   return [
     syntaxCheck(parsed),
     normalizationCheck(parsed, syntaxOk),
+    providerRulesCheck(parsed, syntaxOk),
     typoCheck(parsed, syntaxOk),
     roleCheck(parsed, syntaxOk),
     disposableCheck(parsed, syntaxOk),
@@ -179,6 +182,38 @@ function normalizationCheck(parsed: ParsedEmail, syntaxOk: boolean): Check {
     detail:
       'Trimmed and lowercased. The address is already in its canonical form — no alias tricks in use.',
     facts,
+  };
+}
+
+function providerRulesCheck(parsed: ParsedEmail, syntaxOk: boolean): Check {
+  const title = 'Provider username rules';
+
+  if (!syntaxOk || parsed.parts === null) return skipped('provider_rules', title, SYNTAX_BLOCKED);
+
+  if (!isGmailDomain(parsed.parts.domain)) {
+    return skipped(
+      'provider_rules',
+      title,
+      'Not run — this check only applies to Gmail (gmail.com, googlemail.com).',
+    );
+  }
+
+  if (parsed.providerRuleViolation !== null) {
+    return {
+      id: 'provider_rules',
+      title,
+      outcome: 'fail',
+      detail: parsed.providerRuleViolation.detail,
+      facts: [{ label: 'Rule broken', value: parsed.providerRuleViolation.failure, mono: true }],
+    };
+  }
+
+  return {
+    id: 'provider_rules',
+    title,
+    outcome: 'pass',
+    detail: "The username follows Gmail's own signup rules for length and characters.",
+    facts: [],
   };
 }
 

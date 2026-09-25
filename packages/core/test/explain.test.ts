@@ -60,7 +60,7 @@ describe('explain — syntax', () => {
     const checks = report('not-an-email', null);
     assert.equal(find(checks, 'syntax').outcome, 'fail');
 
-    for (const id of ['normalization', 'typo', 'role', 'disposable', 'free_provider'] as const) {
+    for (const id of ['normalization', 'provider_rules', 'typo', 'role', 'disposable', 'free_provider'] as const) {
       assert.equal(find(checks, id).outcome, 'skipped', id);
     }
   });
@@ -100,6 +100,24 @@ describe('explain — policy', () => {
       check.facts.find((fact) => fact.label === 'Canonical mailbox')?.value,
       'jdoe@gmail.com',
     );
+  });
+});
+
+describe('explain — provider rules', () => {
+  it('is not run for a non-Gmail domain', () => {
+    const check = find(report('a@example.com'), 'provider_rules');
+    assert.equal(check.outcome, 'skipped');
+  });
+
+  it('passes a Gmail username that follows the rules', () => {
+    const check = find(report('ahad.hossain@gmail.com'), 'provider_rules');
+    assert.equal(check.outcome, 'pass');
+  });
+
+  it('fails a Gmail username the provider would never let anyone register', () => {
+    const check = find(report('ahad@gmail.com'), 'provider_rules');
+    assert.equal(check.outcome, 'fail');
+    assert.equal(check.facts.find((fact) => fact.label === 'Rule broken')?.value, 'too_short');
   });
 });
 

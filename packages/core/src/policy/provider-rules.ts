@@ -50,6 +50,11 @@ const FAILURE_DETAIL: Record<ProviderRuleFailure, string> = {
   consecutive_dots: 'Gmail usernames cannot contain two dots in a row.',
 };
 
+/** Whether this domain is one the rules below apply to at all. */
+export function isGmailDomain(domain: string): boolean {
+  return GMAIL_DOMAINS.has(domain.toLowerCase());
+}
+
 /**
  * `null` means either the domain is not Gmail (rule does not apply) or the
  * username is fine. Only the base username is checked — anything from the
@@ -59,7 +64,7 @@ export function checkProviderUsernameRules(
   domain: string,
   localPart: string,
 ): ProviderRuleViolation | null {
-  if (!GMAIL_DOMAINS.has(domain.toLowerCase())) return null;
+  if (!isGmailDomain(domain)) return null;
 
   const plus = localPart.indexOf('+');
   const base = (plus === -1 ? localPart : localPart.slice(0, plus)).toLowerCase();
