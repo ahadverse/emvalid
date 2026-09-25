@@ -260,6 +260,7 @@ export const CHECK_OUTCOME_STYLES: Record<
 
 const REASON_LABELS: Record<ReasonCode, string> = {
   syntax_invalid: 'Invalid syntax',
+  provider_rules_invalid: "Breaks the provider's username rules",
   domain_not_found: 'Domain does not exist',
   domain_no_mail_server: 'Domain has no mail server',
   domain_null_mx: 'Domain accepts no mail (null MX)',
@@ -267,6 +268,8 @@ const REASON_LABELS: Record<ReasonCode, string> = {
   role_account: 'Role address, not a person',
   typo_suspected: 'Domain looks misspelled',
   domain_too_new: 'Domain registered very recently',
+  domain_parked: 'Domain is parked, no mail server',
+  domain_parked_forwarding: 'Domain is parked, mail forwarded',
   mailbox_unverified: 'Mailbox not verified',
   dns_timeout: 'DNS lookup timed out',
   dns_error: 'DNS lookup failed',
