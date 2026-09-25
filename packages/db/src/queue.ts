@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import type { JobSummary } from '@ev/core';
 import { getDb, type Database } from './client.ts';
-import { jobs, type Job, type JobStatus } from './schema.ts';
+import { jobs, type Job, type JobStatus, type ResultFormat } from './schema.ts';
 
 /**
  * Feature 16 — the job queue, built on the jobs table.
@@ -38,6 +38,8 @@ export interface EnqueueInput {
   userId: string;
   originalFilename: string;
   inputPath: string;
+  /** Feature 32. Defaults to 'csv'. */
+  resultFormat?: ResultFormat;
   /** Leave at 0 when the file has not been counted yet. */
   totalRows?: number;
   /** Overrides `retentionDays`. */
@@ -165,6 +167,7 @@ export class JobQueue {
         userId: input.userId,
         originalFilename: input.originalFilename,
         inputPath: input.inputPath,
+        resultFormat: input.resultFormat ?? 'csv',
         totalRows: input.totalRows ?? 0,
         status: 'queued',
         expiresAt,

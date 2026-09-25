@@ -64,10 +64,12 @@ export type ReasonCode =
   | 'domain_parked_forwarding'
   // --- unknown ---
   | 'mailbox_unverified'
+  | 'mailbox_verified'
   | 'dns_timeout'
   | 'dns_error'
-  // --- deliverable (SMTP only, reserved for Deep Scan) ---
-  | 'mailbox_exists';
+  // --- SMTP only (Deep Scan / a hybrid fallback like lib/verifalia.ts) ---
+  | 'mailbox_exists'
+  | 'mailbox_not_found';
 
 /**
  * Which mail platform runs the domain — feature 12. Useful for two things:

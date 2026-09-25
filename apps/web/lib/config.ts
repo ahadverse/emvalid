@@ -121,3 +121,14 @@ export const MIN_CREDITS_TO_UPLOAD = intEnv('MIN_CREDITS_TO_UPLOAD', 1);
 export const PAYMENT_ACCOUNT = process.env.PAYMENT_ACCOUNT?.trim() || null;
 export const PAYMENT_CONTACT = process.env.PAYMENT_CONTACT?.trim() || null;
 
+/**
+ * Hybrid SMTP fallback (feature 45's "Deep Scan", pending in PLAN.md) via
+ * Verifalia's API — real mailbox verification, borrowed rather than
+ * self-hosted. Both default to null rather than a fake pair: `lib/verifalia.ts`
+ * treats null as "not configured" and skips the call entirely, the same way
+ * an unset `PAYMENT_ACCOUNT` skips showing a bKash number nobody owns. Never
+ * automatic on a plain single check — see `lib/verifalia.ts` for why.
+ */
+export const VERIFALIA_USERNAME = process.env.VERIFALIA_USERNAME?.trim() || null;
+export const VERIFALIA_PASSWORD = process.env.VERIFALIA_PASSWORD?.trim() || null;
+

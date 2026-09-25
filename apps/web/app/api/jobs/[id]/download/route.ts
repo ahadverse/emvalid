@@ -1,6 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { relative, resolve } from 'node:path';
+import { extname, relative, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { DATA_DIR } from '@/lib/config';
 import { guardUi, jsonError, withErrors } from '@/lib/http';
@@ -60,19 +60,31 @@ export const GET = withErrors(async (request: Request, context: Context) => {
 
   const stream = Readable.toWeb(createReadStream(path)) as ReadableStream<Uint8Array>;
 
+  // Feature 32 — the file on disk already carries the format the job was run
+  // with (worker/src/index.ts picks the extension from `job.resultFormat`),
+  // so reading it back here is the one place that needs to know, rather than
+  // this route also taking a dependency on the job row's format column.
+  const format = extname(path).slice(1);
+
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Type': CONTENT_TYPES[format] ?? 'application/octet-stream',
       'Content-Length': String(size),
-      'Content-Disposition': contentDisposition(resultFilename(output.originalFilename)),
+      'Content-Disposition': contentDisposition(resultFilename(output.originalFilename, format)),
       'Cache-Control': 'no-store',
     },
   });
 });
 
-function resultFilename(original: string): string {
+const CONTENT_TYPES: Record<string, string> = {
+  csv: 'text/csv; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+function resultFilename(original: string, format: string): string {
   const base = original.replace(/\.[^.]+$/, '');
-  return `${base || 'results'}-verified.csv`;
+  return `${base || 'results'}-verified.${format}`;
 }
 
 /**

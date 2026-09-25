@@ -10,7 +10,9 @@
     "build": "tsc -b packages/core packages/db packages/pipeline",
     "test": "pnpm -r test",
     "// typecheck": "packages are project references, so their declarations must exist before dependents can be checked",
-    "typecheck": "pnpm run build && pnpm -r typecheck"
+    "typecheck": "pnpm run build && pnpm -r typecheck",
+    "// dev": "web alone only accepts uploads — nothing processes a job without the worker, hence both, in parallel",
+    "dev": "pnpm --parallel --filter @ev/web --filter @ev/worker dev"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",

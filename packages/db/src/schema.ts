@@ -52,6 +52,11 @@ export const userStatusValues = ['active', 'suspended'] as const;
 export type UserStatus = (typeof userStatusValues)[number];
 export const userStatusEnum = pgEnum('user_status', userStatusValues);
 
+/** Feature 32. */
+export const resultFormatValues = ['csv', 'json', 'xlsx'] as const;
+export type ResultFormat = (typeof resultFormatValues)[number];
+export const resultFormatEnum = pgEnum('result_format', resultFormatValues);
+
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   /** Stored lowercased. The unique index is what makes that matter. */
@@ -267,6 +272,8 @@ export const jobs = pgTable(
     inputPath: text('input_path').notNull(),
     /** Null until the job finishes — a failed job has nothing to download. */
     outputPath: text('output_path'),
+    /** Feature 32 — chosen at upload time; decides both `outputPath`'s extension and the download route's Content-Type. */
+    resultFormat: resultFormatEnum('result_format').notNull().default('csv'),
     /** 0 until the file has been counted; progress is meaningless before then. */
     totalRows: integer('total_rows').notNull().default(0),
     processedRows: integer('processed_rows').notNull().default(0),

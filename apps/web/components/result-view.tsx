@@ -187,6 +187,7 @@ function ConfidenceRing({
   /** Completes the sentence "Confidence — …". Never omitted. */
   measures: string;
 }) {
+
   const RADIUS = 26;
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const clamped = Math.max(0, Math.min(100, value));

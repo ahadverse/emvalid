@@ -17,6 +17,14 @@ import { formatBytes } from '@/lib/format';
 const ACCEPT = '.csv,.tsv,.txt,.xlsx,.xls';
 const FORMATS = ['CSV', 'TSV', 'TXT', 'XLSX'] as const;
 
+/** Feature 32 — what the result file comes back as. Input format is separate and auto-detected. */
+const RESULT_FORMATS = [
+  { value: 'csv', label: 'CSV' },
+  { value: 'xlsx', label: 'XLSX' },
+  { value: 'json', label: 'JSON' },
+] as const;
+type ResultFormatValue = (typeof RESULT_FORMATS)[number]['value'];
+
 export function UploadForm() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -25,6 +33,7 @@ export function UploadForm() {
   const [dragging, setDragging] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [resultFormat, setResultFormat] = useState<ResultFormatValue>('csv');
 
   const uploading = progress !== null;
   // 100% on the wire is not 100% done: the server still has to write the file
@@ -56,6 +65,7 @@ export function UploadForm() {
 
     const body = new FormData();
     body.append('file', file, file.name);
+    body.append('format', resultFormat);
 
     const request = new XMLHttpRequest();
     request.open('POST', '/api/upload');
@@ -185,6 +195,27 @@ export function UploadForm() {
                   </p>
                 </div>
               </div>
+
+              {!uploading && (
+                <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Result file format">
+                  {RESULT_FORMATS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="radio"
+                      aria-checked={resultFormat === option.value}
+                      onClick={() => setResultFormat(option.value)}
+                      className={buttonClass({
+                        variant: resultFormat === option.value ? 'secondary' : 'ghost',
+                        size: 'sm',
+                        className: 'px-2.5 font-mono text-[11px]',
+                      })}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 {!uploading && (

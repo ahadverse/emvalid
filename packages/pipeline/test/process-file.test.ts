@@ -148,6 +148,37 @@ describe('processFile', () => {
     assert.equal(summary.byAdvice.do_not_send, 1);
     assert.equal(summary.byAdvice.review, 1);
   });
+
+  it('writes JSON instead of CSV when a format is given', async () => {
+    const inputPath = join(dir, 'format.csv');
+    const outputPath = join(dir, 'format.out.json');
+    await writeFile(inputPath, 'email\na@example.com\n', 'utf8');
+
+    await processFile({ inputPath, outputPath, validator: validator(), format: 'json' });
+
+    const rows = JSON.parse(await readFile(outputPath, 'utf8')) as Array<{ input: string }>;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.input, 'a@example.com');
+  });
+
+  it('applies transform to every result before it is counted or written', async () => {
+    const inputPath = join(dir, 'transform.csv');
+    const outputPath = join(dir, 'transform.out.csv');
+    await writeFile(inputPath, 'email\ninfo@example.com\n', 'utf8');
+
+    const { summary } = await processFile({
+      inputPath,
+      outputPath,
+      validator: validator(),
+      // A stand-in for features 30/31's override step: force everything to 'send'.
+      transform: (result) => ({ ...result, advice: 'send' }),
+    });
+
+    const output = await readFile(outputPath, 'utf8');
+    assert.equal(summary.byAdvice.send, 1);
+    assert.equal(summary.byAdvice.review, 0);
+    assert.match(output.split('\n')[1] ?? '', /,send,/);
+  });
 });
 
 describe('escapeCsv', () => {

@@ -35,7 +35,10 @@ function cellText(value: unknown): string {
 }
 
 export async function* readXlsxRows(path: string): RowSource {
-  const ExcelJS = await import('exceljs');
+  // exceljs is CommonJS; under this project's module resolution the dynamic
+  // import lands the real module on `.default`, not on the namespace object
+  // itself — `(await import('exceljs')).stream` is `undefined`.
+  const { default: ExcelJS } = await import('exceljs');
 
   // Streaming reader: rows are emitted as the file is parsed rather than the
   // workbook being materialised. A 600 MB xlsx read the ordinary way is a

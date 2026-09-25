@@ -271,9 +271,11 @@ const REASON_LABELS: Record<ReasonCode, string> = {
   domain_parked: 'Domain is parked, no mail server',
   domain_parked_forwarding: 'Domain is parked, mail forwarded',
   mailbox_unverified: 'Mailbox not verified',
+  mailbox_verified: 'Mailbox verified',
   dns_timeout: 'DNS lookup timed out',
   dns_error: 'DNS lookup failed',
   mailbox_exists: 'Mailbox confirmed',
+  mailbox_not_found: 'Mailbox confirmed not to exist',
 };
 
 export function reasonLabel(reason: ReasonCode): string {
