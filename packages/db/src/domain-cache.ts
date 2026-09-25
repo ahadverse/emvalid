@@ -39,6 +39,10 @@ export function rowToDomainInfo(row: DomainCacheRow): DomainInfo {
     nxdomain: row.nxdomain,
     error: null,
     provider: row.provider,
+    // A row from before migration 0004 reads back NULL here already — the
+    // column has no default — so this is a straight pass-through, not a
+    // translation: `null` means "not checked" on both sides.
+    parked: row.parked,
     checkedAt: row.checkedAt.getTime(),
   };
 }
@@ -52,6 +56,7 @@ export function domainInfoToRow(info: DomainInfo): DomainCacheRow {
     hasAddressRecord: info.hasAddressRecord,
     nxdomain: info.nxdomain,
     provider: info.provider,
+    parked: info.parked,
     checkedAt: new Date(info.checkedAt),
   };
 }
@@ -153,6 +158,7 @@ export class PostgresDomainCache implements DomainCache {
           hasAddressRecord: sql`excluded.has_address_record`,
           nxdomain: sql`excluded.nxdomain`,
           provider: sql`excluded.provider`,
+          parked: sql`excluded.parked`,
           checkedAt: sql`excluded.checked_at`,
         },
         // A concurrent writer may have landed a newer lookup while ours was in

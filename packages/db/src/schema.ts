@@ -305,6 +305,11 @@ export const jobs = pgTable(
  * row here always means "we know this". Freshness is `checked_at` plus a TTL
  * applied at read time, not an expiry column, so the TTL can be retuned without
  * a backfill.
+ *
+ * `parked` is the one exception to "a row always means we know this" — it is
+ * nullable on purpose (migration 0004). A row from before that migration, or
+ * one whose NS lookup failed, has no opinion on parking; NULL is "not
+ * checked", never "not parked". See `DomainInfo.parked` in @ev/core.
  */
 export const domainCache = pgTable(
   'domain_cache',
@@ -318,6 +323,7 @@ export const domainCache = pgTable(
     hasAddressRecord: boolean('has_address_record').notNull().default(false),
     nxdomain: boolean('nxdomain').notNull().default(false),
     provider: text('provider').$type<MxProvider>(),
+    parked: boolean('parked'),
     checkedAt: timestamp('checked_at', { withTimezone: true }).notNull().defaultNow(),
   },
   // Both the TTL read filter and the retention purge order by this column.

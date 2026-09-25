@@ -30,6 +30,7 @@ const info: DomainInfo = {
   nxdomain: false,
   error: null,
   provider: 'other',
+  parked: null,
   checkedAt: Date.now(),
 };
 

@@ -70,11 +70,17 @@ describe('domain cache mapping', () => {
     nxdomain: false,
     error: null,
     provider: 'google',
+    parked: false,
     checkedAt: Date.parse('2026-02-03T10:00:00Z'),
   };
 
   it('round-trips without losing a field', () => {
     assert.deepEqual(rowToDomainInfo(domainInfoToRow(info)), info);
+  });
+
+  it('round-trips a null parked status — "not checked", never "not parked"', () => {
+    const notChecked = { ...info, parked: null };
+    assert.deepEqual(rowToDomainInfo(domainInfoToRow(notChecked)), notChecked);
   });
 
   it('always reads back with error null — a failure is never a cached row', () => {
