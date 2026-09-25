@@ -51,6 +51,7 @@ export type CheckId =
   | 'disposable'
   | 'free_provider'
   | 'dns'
+  | 'parking'
   | 'mx_provider'
   | 'mailbox';
 
@@ -82,6 +83,7 @@ export function explain(parsed: ParsedEmail, domain: DomainInfo | null): Check[]
     disposableCheck(parsed, syntaxOk, domain),
     freeProviderCheck(parsed, syntaxOk),
     dnsCheck(domain, syntaxOk),
+    parkingCheck(domain),
     mxProviderCheck(domain),
     mailboxCheck(),
   ];
@@ -407,6 +409,42 @@ function dnsCheck(domain: DomainInfo | null, syntaxOk: boolean): Check {
     outcome: 'fail',
     detail:
       'The domain resolves but has nowhere to deliver mail — no MX record and no address record to fall back on.',
+    facts: [],
+  };
+}
+
+function parkingCheck(domain: DomainInfo | null): Check {
+  const title = 'Parked domain check';
+
+  if (domain === null || domain.error !== null) {
+    return skipped('parking', title, 'Not run — no nameserver data was established for this domain.');
+  }
+
+  // Feature 66. `null` covers both a failed NS lookup and an older cache row
+  // written before this check existed — either way, "not checked", not "not
+  // parked", so the report says exactly that instead of guessing.
+  if (domain.parked === null) {
+    return skipped('parking', title, 'Not run — the nameserver lookup did not return a usable answer.');
+  }
+
+  if (domain.parked) {
+    const hasMx = domain.mx.length > 0;
+    return {
+      id: 'parking',
+      title,
+      outcome: hasMx ? 'warn' : 'fail',
+      detail: hasMx
+        ? "The domain's nameservers belong to a parking service, though mail does appear to be forwarded somewhere — worth a human check before sending."
+        : "The domain's nameservers belong to a parking service and it has no mail server — a for-sale or placeholder page, not an active mailbox.",
+      facts: [],
+    };
+  }
+
+  return {
+    id: 'parking',
+    title,
+    outcome: 'pass',
+    detail: "The domain's nameservers do not belong to any known parking service.",
     facts: [],
   };
 }

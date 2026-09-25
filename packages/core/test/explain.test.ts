@@ -13,6 +13,7 @@ function domain(overrides: Partial<DomainInfo> = {}): DomainInfo {
     nxdomain: false,
     error: null,
     provider: 'other',
+    parked: null,
     checkedAt: Date.now(),
     ...overrides,
   };
@@ -164,12 +165,40 @@ describe('explain — DNS', () => {
     for (const error of ['timeout', 'servfail', 'other'] as const) {
       const dns = find(report('a@example.com', domain({ mx: [], error, provider: null })), 'dns');
       assert.equal(dns.outcome, 'skipped', error);
+      assert.equal(find(report('a@example.com', domain({ mx: [], error, provider: null })), 'parking').outcome, 'skipped', error);
     }
   });
 
   it('DNS not run at all is reported as not run', () => {
     assert.equal(find(report('a@example.com', null), 'dns').outcome, 'skipped');
     assert.equal(find(report('a@example.com', null), 'mx_provider').outcome, 'skipped');
+    assert.equal(find(report('a@example.com', null), 'parking').outcome, 'skipped');
+  });
+});
+
+describe('explain — parked domains', () => {
+  it('is not run when the nameserver lookup never resolved', () => {
+    // `parked: null` — a failed NS query, or an old cache row from before
+    // this column existed. Either way this must read as "not checked".
+    const check = find(report('a@example.com', domain({ parked: null })), 'parking');
+    assert.equal(check.outcome, 'skipped');
+  });
+
+  it('passes a domain whose nameservers are not a known parking service', () => {
+    assert.equal(find(report('a@example.com', domain({ parked: false })), 'parking').outcome, 'pass');
+  });
+
+  it('fails a parked domain with no mail server', () => {
+    const check = find(report('a@parked-example.com', domain({ mx: [], parked: true })), 'parking');
+    assert.equal(check.outcome, 'fail');
+  });
+
+  it('warns rather than fails when a parked domain still has an MX', () => {
+    const check = find(
+      report('a@parked-example.com', domain({ mx: ['forward.example.net'], parked: true })),
+      'parking',
+    );
+    assert.equal(check.outcome, 'warn');
   });
 });
 

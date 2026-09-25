@@ -5,6 +5,7 @@ import { isFreeProvider } from '../src/policy/free-providers.ts';
 import { DisposableRegistry, isDisposable, isDisposableMx } from '../src/policy/disposable.ts';
 import { damerauLevenshtein, suggestDomain } from '../src/policy/typo.ts';
 import { detectMxProvider, smtpProbeIsUseless } from '../src/policy/mx-provider.ts';
+import { isParkingNs } from '../src/policy/parking.ts';
 
 describe('isRoleAccount', () => {
   it('catches the standard shared inboxes', () => {
@@ -87,6 +88,32 @@ describe('isDisposableMx', () => {
 
   it('returns false for an empty MX list', () => {
     assert.equal(isDisposableMx([]), false);
+  });
+});
+
+describe('isParkingNs', () => {
+  it('recognises well-known parking and marketplace nameservers', () => {
+    assert.equal(isParkingNs(['ns1.sedoparking.com', 'ns2.sedoparking.com']), true);
+    assert.equal(isParkingNs(['ns1.parkingcrew.net']), true);
+    assert.equal(isParkingNs(['dns1.bodis.com']), true);
+  });
+
+  it('matches a subdomain of the parking nameserver, not just the exact host', () => {
+    assert.equal(isParkingNs(['ns3.above.com']), true);
+  });
+
+  it('never matches an ordinary registrar or hosting nameserver', () => {
+    for (const host of ['ns1.google.com', 'ns-1.awsdns-00.com', 'dns1.registrar-servers.com']) {
+      assert.equal(isParkingNs([host]), false, host);
+    }
+  });
+
+  it('does not match a real domain that merely ends similarly', () => {
+    assert.equal(isParkingNs(['ns1.notsedoparking.com']), false);
+  });
+
+  it('returns false for an empty NS list', () => {
+    assert.equal(isParkingNs([]), false);
   });
 });
 

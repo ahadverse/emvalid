@@ -234,9 +234,38 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
         retryable: false,
       };
     }
+
+    // 7. Feature 66. `parked === null` (lookup failed, or an old cache row
+    //    predating this column) means "not checked" and this simply does not
+    //    fire — never "not parked". A parked domain with no MX would
+    //    otherwise read as the weak A-record-fallback `unknown` below; this
+    //    is a stronger, more honest answer than that.
+    if (domain.parked === true) {
+      if (domain.mx.length === 0) {
+        return {
+          status: 'risky',
+          advice: 'do_not_send',
+          confidence: 90,
+          reason: 'domain_parked',
+          detail: "Domain's nameservers belong to a parking service and it has no mail server — a for-sale or placeholder page, not an active mailbox.",
+          retryable: false,
+        };
+      }
+      return {
+        status: 'risky',
+        // An MX on a parked domain usually means someone set up forwarding —
+        // deliverable in principle, but not obviously to the business the
+        // address looks like it belongs to. A human should look.
+        advice: 'review',
+        confidence: 75,
+        reason: 'domain_parked_forwarding',
+        detail: "Domain's nameservers belong to a parking service, though mail does appear to be forwarded somewhere.",
+        retryable: false,
+      };
+    }
   }
 
-  // 7. Burner address. Deliverable today, gone next week, and it belongs to
+  // 8. Burner address. Deliverable today, gone next week, and it belongs to
   //    nobody — the strongest risky signal we have. Caught either by domain
   //    name (feature 8) or, for a domain not on any list, by its mail
   //    exchanger belonging to a disposable-only backend (feature 65).
@@ -251,7 +280,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 8. Looks like a mistyped domain. Ranked above role because if the domain
+  // 9. Looks like a mistyped domain. Ranked above role because if the domain
   //    is wrong, nothing else about the address matters.
   if (parsed.suggestion !== null) {
     return {
@@ -266,7 +295,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 9. Shared or automated inbox. Usually deliverable, always a bad send.
+  // 10. Shared or automated inbox. Usually deliverable, always a bad send.
   if (parsed.role) {
     return {
       status: 'risky',
@@ -280,7 +309,7 @@ function decide(parsed: ParsedEmail, domain: DomainInfo | null): Verdict {
     };
   }
 
-  // 10. Everything checks out and we still do not know if the mailbox exists.
+  // 11. Everything checks out and we still do not know if the mailbox exists.
   //    For `unknown`, confidence reads as "how likely mail would be accepted"
   //    — a prior from the domain evidence, not a claim about the mailbox.
   if (domain === null) {

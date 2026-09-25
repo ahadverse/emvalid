@@ -15,6 +15,7 @@ function info(domain: string, overrides: Partial<DomainInfo> = {}): DomainInfo {
     nxdomain: false,
     error: null,
     provider: 'other',
+    parked: null,
     checkedAt: Date.now(),
     ...overrides,
   };

@@ -57,6 +57,11 @@ export type ReasonCode =
   | 'role_account'
   | 'typo_suspected'
   | 'domain_too_new'
+  // Feature 66. Split in two because the advice differs: no MX at all is a
+  // plain "don't bother", an MX on a parked domain means forwarding is set
+  // up somewhere and a human should look before writing the address off.
+  | 'domain_parked'
+  | 'domain_parked_forwarding'
   // --- unknown ---
   | 'mailbox_unverified'
   | 'dns_timeout'
@@ -150,6 +155,15 @@ export interface DomainInfo {
   /** Feature 7 — resolver broke; this is not an answer about the domain. */
   error: 'timeout' | 'servfail' | 'other' | null;
   provider: MxProvider | null;
+  /**
+   * Feature 66 — nameservers belong to a known parking service. `null` means
+   * this was never established: either the NS lookup itself failed (kept
+   * separate from `error` on purpose, per invariant 2 — a failed bonus query
+   * must not turn a good MX/A answer into a retry) or, for a row read back
+   * from an older cache, the column simply did not exist yet. Either way,
+   * `null` is "not checked", never "not parked".
+   */
+  parked: boolean | null;
   /** Unix ms. Used for cache TTL. */
   checkedAt: number;
 }

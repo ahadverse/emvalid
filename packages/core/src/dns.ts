@@ -1,5 +1,6 @@
 import { Resolver } from 'node:dns/promises';
 import { detectMxProvider } from './policy/mx-provider.ts';
+import { isParkingNs } from './policy/parking.ts';
 import type { DomainInfo } from './types.ts';
 
 /**
@@ -59,21 +60,28 @@ export class DnsClient {
       nxdomain: false,
       error: null,
       provider: null,
+      parked: null,
       checkedAt: Date.now(),
     };
 
+    // Feature 66. Always runs, independent of the MX/A outcome below and of
+    // whether it succeeds — a failed NS lookup leaves `parked` at `null`
+    // rather than touching `error`, so a bonus query that times out can never
+    // turn an otherwise-good answer into a retry (invariant 2).
+    const parked = await this.#resolveParked(domain);
+
     const mx = await this.#resolveMx(domain);
 
-    if (mx.error !== null) return { ...base, error: mx.error };
+    if (mx.error !== null) return { ...base, error: mx.error, parked };
 
     if (mx.hosts.length > 0) {
       // RFC 7505: a single MX of "." means the domain accepts no mail at all.
       // It is an explicit statement, not an absence — the strongest
       // undeliverable signal DNS can give us.
       if (mx.hosts.length === 1 && (mx.hosts[0] === '.' || mx.hosts[0] === '')) {
-        return { ...base, nullMx: true };
+        return { ...base, nullMx: true, parked };
       }
-      return { ...base, mx: mx.hosts, provider: detectMxProvider(mx.hosts) };
+      return { ...base, mx: mx.hosts, provider: detectMxProvider(mx.hosts), parked };
     }
 
     // Feature 6 — no MX. RFC 5321 §5.1 says fall back to the address record:
@@ -81,13 +89,28 @@ export class DnsClient {
     // Plenty of small business domains are set up exactly this way.
     const address = await this.#resolveAddress(domain);
 
-    if (address.error !== null) return { ...base, error: address.error };
+    if (address.error !== null) return { ...base, error: address.error, parked };
 
     return {
       ...base,
       hasAddressRecord: address.found,
       nxdomain: address.nxdomain,
+      parked,
     };
+  }
+
+  /**
+   * `null` on any failure — this is a bonus signal, not load-bearing the way
+   * MX/A are, so a broken resolver here must never look like a broken
+   * resolver for the domain as a whole.
+   */
+  async #resolveParked(domain: string): Promise<boolean | null> {
+    try {
+      const hosts = await this.#resolver.resolveNs(domain);
+      return isParkingNs(hosts);
+    } catch {
+      return null;
+    }
   }
 
   async #resolveMx(

@@ -55,3 +55,4 @@ export {
 } from './policy/disposable.ts';
 export { damerauLevenshtein, suggestDomain, type TypoSuggestion } from './policy/typo.ts';
 export { detectMxProvider, smtpProbeIsUseless } from './policy/mx-provider.ts';
+export { isParkingNs } from './policy/parking.ts';

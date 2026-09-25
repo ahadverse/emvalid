@@ -12,6 +12,7 @@ function domain(overrides: Partial<DomainInfo> = {}): DomainInfo {
     nxdomain: false,
     error: null,
     provider: 'other',
+    parked: null,
     checkedAt: Date.now(),
     ...overrides,
   };
@@ -45,6 +46,34 @@ describe('classify — undeliverable', () => {
     const result = check('a@example.com', domain({ mx: [], hasAddressRecord: false, provider: null }));
     assert.equal(result.status, 'undeliverable');
     assert.equal(result.reason, 'domain_no_mail_server');
+  });
+});
+
+describe('classify — parked domains', () => {
+  it('a parked domain with no mail server is risky, not undeliverable, and says do not send', () => {
+    const result = check('a@parked-example.com', domain({
+      mx: [], hasAddressRecord: true, provider: null, parked: true,
+    }));
+    assert.equal(result.status, 'risky');
+    assert.equal(result.reason, 'domain_parked');
+    assert.equal(result.advice, 'do_not_send');
+  });
+
+  it('a parked domain that still has an MX is risky but only asks for a review', () => {
+    const result = check('a@parked-example.com', domain({
+      mx: ['forward.example.net'], provider: null, parked: true,
+    }));
+    assert.equal(result.status, 'risky');
+    assert.equal(result.reason, 'domain_parked_forwarding');
+    assert.equal(result.advice, 'review');
+  });
+
+  it('an unresolved parked check never changes the verdict', () => {
+    // `parked: null` — the NS lookup failed, or an old cache row predates
+    // the column. Invariant 2: a failed bonus query is not a verdict.
+    const result = check('a@example.com', domain({ parked: null }));
+    assert.notEqual(result.reason, 'domain_parked');
+    assert.notEqual(result.reason, 'domain_parked_forwarding');
   });
 });
 
