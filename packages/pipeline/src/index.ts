@@ -11,7 +11,17 @@ export { readCsvRows, type CsvReaderOptions } from './csv-reader.ts';
 export { readXlsxRows } from './xlsx-reader.ts';
 export { detectFormat, openRows } from './reader.ts';
 export { SNIFF_ROWS, detectEmailColumn, type ColumnDetection } from './column-detect.ts';
-export { RESULT_COLUMNS, ResultWriter, escapeCsv } from './writer.ts';
+export {
+  RESULT_COLUMNS,
+  createResultWriter,
+  resultFileExtension,
+  escapeCsv,
+  CsvResultWriter,
+  JsonResultWriter,
+  XlsxResultWriter,
+  type ResultWriter,
+  type ResultFormat,
+} from './writer.ts';
 export {
   processFile,
   type ProcessFileOptions,

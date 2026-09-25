@@ -4,9 +4,18 @@ import { createWriteStream } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { extname, join, resolve } from 'node:path';
+import type { ResultFormat } from '@ev/db';
 import { DATA_DIR, MAX_UPLOAD_BYTES } from './config';
 import { createJob, type JobRecord } from './jobs';
 import { MultipartError, readMultipart } from './multipart';
+
+const RESULT_FORMATS = new Set<ResultFormat>(['csv', 'json', 'xlsx']);
+
+/** Anything unrecognised (including absent) quietly falls back to CSV. */
+function readResultFormat(fields: Map<string, string>): ResultFormat {
+  const raw = fields.get('format');
+  return raw !== undefined && RESULT_FORMATS.has(raw as ResultFormat) ? (raw as ResultFormat) : 'csv';
+}
 
 /**
  * Feature 14 — take a CSV/XLSX upload and turn it into a queued job.
@@ -81,6 +90,7 @@ export async function handleUpload(request: Request, userId: string): Promise<Up
       userId,
       originalFilename: displayName(result.file.filename),
       inputPath,
+      resultFormat: readResultFormat(result.fields),
     });
 
     return { job, bytes: result.file.bytes };

@@ -25,7 +25,7 @@ export function JobLive({ initial }: { initial: JobRecord }) {
   const [job, setJob] = useState<JobRecord>(initial);
   const [stale, setStale] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+console.log('JobLive', {  job });
   useEffect(() => {
     if (isTerminal(job.status)) return;
 
@@ -35,8 +35,9 @@ export function JobLive({ initial }: { initial: JobRecord }) {
       try {
         const response = await fetch(`/api/jobs/${initial.id}`, { cache: 'no-store' });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
+ console.log('JobLive poll', { response });
         const next = (await response.json()) as JobRecord;
+       
         if (cancelled) return;
 
         setStale(false);

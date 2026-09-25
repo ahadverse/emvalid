@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { getQueue, type Job, type JobStatus as DbJobStatus } from '@ev/db';
+import { getQueue, type Job, type JobStatus as DbJobStatus, type ResultFormat } from '@ev/db';
 import { RETENTION_DAYS } from './config';
 import type { JobRecord } from './dto';
 import type { JobStatus } from './format';
@@ -34,6 +34,8 @@ export interface NewJobInput {
   userId: string;
   originalFilename: string;
   inputPath: string;
+  /** Feature 32. Defaults to 'csv'. */
+  resultFormat?: ResultFormat;
 }
 
 export async function createJob(input: NewJobInput): Promise<JobRecord> {
@@ -41,6 +43,7 @@ export async function createJob(input: NewJobInput): Promise<JobRecord> {
     userId: input.userId,
     originalFilename: input.originalFilename,
     inputPath: input.inputPath,
+    ...(input.resultFormat === undefined ? {} : { resultFormat: input.resultFormat }),
     // `totalRows` is left at its default of 0 on purpose. Only the worker can
     // know the real count — it emerges after parsing and alias-aware
     // deduplication — and the UI shows an indeterminate bar until it does,

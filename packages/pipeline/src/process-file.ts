@@ -2,13 +2,14 @@ import {
   Deduplicator,
   SummaryBuilder,
   parseEmail,
+  type EmailResult,
   type EmailValidator,
   type JobSummary,
   type ParsedEmail,
 } from '@ev/core';
 import { SNIFF_ROWS, detectEmailColumn, type ColumnDetection } from './column-detect.ts';
 import { openRows } from './reader.ts';
-import { ResultWriter } from './writer.ts';
+import { createResultWriter, type ResultFormat } from './writer.ts';
 import type { SourceFormat } from './types.ts';
 
 /**
@@ -31,6 +32,16 @@ export interface ProcessFileOptions {
   outputPath: string;
   /** Constructed by the caller so cache and DNS settings live in one place. */
   validator: EmailValidator;
+  /** Feature 32. Defaults to 'csv' — the format the caller chose `outputPath`'s extension for. */
+  format?: ResultFormat;
+  /**
+   * Features 30/31 — a user's own address-level and reason-level overrides,
+   * applied to every result right after the engine classifies it and before
+   * it is counted or written. Pure and synchronous on purpose: the caller
+   * loads whatever rules it needs once, up front, and closes over them here
+   * rather than this file knowing anything about accounts or a database.
+   */
+  transform?: (result: EmailResult) => EmailResult;
   /** Rows per DNS/classify batch. Bigger batches group domains better. */
   batchSize?: number;
   /**
@@ -65,6 +76,8 @@ export async function processFile(options: ProcessFileOptions): Promise<ProcessF
     inputPath,
     outputPath,
     validator,
+    format: resultFormat = 'csv',
+    transform,
     batchSize = 1000,
     dedupe = true,
     onProgress,
@@ -73,7 +86,7 @@ export async function processFile(options: ProcessFileOptions): Promise<ProcessF
   } = options;
 
   const { rows, format } = await openRows(inputPath);
-  const writer = new ResultWriter(outputPath);
+  const writer = createResultWriter(resultFormat, outputPath);
   const summary = new SummaryBuilder();
   const deduper = new Deduplicator();
 
@@ -97,7 +110,8 @@ export async function processFile(options: ProcessFileOptions): Promise<ProcessF
     // Domain grouping happens inside the validator: one DNS lookup per
     // distinct domain in the batch, not one per address.
     const results = await validator.classifyParsed(batch);
-    for (const result of results) {
+    for (const raw of results) {
+      const result = transform ? transform(raw) : raw;
       summary.add(result);
       await writer.write(result);
     }

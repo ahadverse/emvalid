@@ -10,7 +10,7 @@ import {
   purgeStaleDomainCache,
   type Job,
 } from '@ev/db';
-import { processFile } from '@ev/pipeline';
+import { processFile, resultFileExtension } from '@ev/pipeline';
 import { config } from './config.ts';
 import { refreshDisposableList } from './disposable-refresh.ts';
 import { log } from './log.ts';
@@ -51,7 +51,8 @@ async function runJob(job: Job): Promise<void> {
   const abort = new AbortController();
   currentJob = { id: job.id, abort };
 
-  const outputPath = job.outputPath ?? join(config.dataDir, 'results', `${job.id}.csv`);
+  const outputPath =
+    job.outputPath ?? join(config.dataDir, 'results', `${job.id}${resultFileExtension(job.resultFormat)}`);
   await mkdir(dirname(outputPath), { recursive: true });
 
   // Progress writes are cheap but not free, and a big job would otherwise
@@ -124,6 +125,7 @@ async function runJob(job: Job): Promise<void> {
     const { summary, column, format } = await processFile({
       inputPath: job.inputPath,
       outputPath,
+      format: job.resultFormat,
       validator,
       batchSize: config.batchSize,
       signal: abort.signal,
