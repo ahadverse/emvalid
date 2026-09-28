@@ -269,8 +269,15 @@ export const jobs = pgTable(
     status: jobStatusEnum('status').notNull().default('queued'),
     /** What the user called the file. Shown in the dashboard, never used as a path. */
     originalFilename: text('original_filename').notNull(),
+    /**
+     * An @ev/storage key — `uploads/<id>/input.csv` — not a filesystem path,
+     * despite the column name, which predates the split across two hosts and is
+     * kept only because renaming it would be a migration that buys nothing.
+     * Anything holding a real path is a pre-split row; `isStorageKey` rejects
+     * those rather than letting one reach a file operation.
+     */
     inputPath: text('input_path').notNull(),
-    /** Null until the job finishes — a failed job has nothing to download. */
+    /** Likewise a key. Null until the job finishes — a failed job has nothing to download. */
     outputPath: text('output_path'),
     /** Feature 32 — chosen at upload time; decides both `outputPath`'s extension and the download route's Content-Type. */
     resultFormat: resultFormatEnum('result_format').notNull().default('csv'),

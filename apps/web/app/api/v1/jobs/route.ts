@@ -1,18 +1,32 @@
-import { creditBalance } from '@ev/db';
-import { MIN_CREDITS_TO_UPLOAD } from '@/lib/config';
 import { guardApi, json, jsonError, withErrors } from '@/lib/http';
-import { listJobs } from '@/lib/jobs';
-import { handleUpload, UploadError } from '@/lib/upload';
+import { readJsonBody, stringField } from '@/lib/json-body';
+import { listJobs, type JobRecord } from '@/lib/jobs';
+import {
+  completeUpload,
+  handleUpload,
+  readResultFormat,
+  requireCredits,
+  UploadError,
+} from '@/lib/upload';
 
 /**
  * Bulk jobs over the public API.
  *
  * GET  /api/v1/jobs            → { jobs: JobRecord[] }   (newest first, max 100)
  * POST /api/v1/jobs            → 201 JobRecord
- *        multipart/form-data, one file part named anything, CSV or XLSX.
  *
- * POST shares lib/upload.ts with the dashboard route, so the size limit and
- * the streaming behaviour are identical whichever door the file comes through.
+ * POST takes the file one of two ways, and which one is right depends entirely
+ * on size:
+ *
+ *   multipart/form-data  — one file part, CSV or XLSX. Simple, one request,
+ *     and limited by what a serverless function will accept as a request body,
+ *     which is a few megabytes.
+ *
+ *   application/json     — { uploadId, filename, format? } after PUTting the
+ *     bytes at a URL from POST /api/v1/uploads. No ceiling but the account's.
+ *
+ * Both land in lib/upload.ts, so the extension check, the size limit and the
+ * key layout are identical whichever door the file comes through.
  */
 
 export const runtime = 'nodejs';
@@ -36,25 +50,44 @@ export const POST = withErrors(async (request) => {
   const guard = await guardApi(request);
   if (!guard.ok) return guard.response;
 
-  // Same gate as the dashboard's upload route: the exact row count is unknown
-  // until the worker reads the file, so all this can refuse is an account with
-  // nothing left. The per-row charge happens in the worker.
-  if ((await creditBalance(guard.identity.userId)) < MIN_CREDITS_TO_UPLOAD) {
-    return jsonError(
-      'insufficient_credits',
-      'No verification credits left on this account. Buy a plan to continue.',
-      402,
-      guard.headers,
-    );
-  }
-
   try {
-    const { job } = await handleUpload(request, guard.identity.userId);
+    // Same gate as the dashboard's upload route: the exact row count is
+    // unknown until the worker reads the file, so all this can refuse is an
+    // account with nothing left. The per-row charge happens in the worker.
+    await requireCredits(guard.identity.userId);
+
+    const job = isJson(request)
+      ? await completeFromBody(request, guard.identity.userId)
+      : (await handleUpload(request, guard.identity.userId)).job;
+
     return json(job, 201, { ...guard.headers, Location: `/api/v1/jobs/${job.id}` });
   } catch (error) {
     if (error instanceof UploadError) {
-      return jsonError('upload_failed', error.message, error.status, guard.headers);
+      return jsonError(error.code, error.message, error.status, guard.headers);
     }
     throw error;
   }
 });
+
+function isJson(request: Request): boolean {
+  return (request.headers.get('content-type') ?? '').toLowerCase().includes('application/json');
+}
+
+async function completeFromBody(request: Request, userId: string): Promise<JobRecord> {
+  const body = await readJsonBody(request);
+  const uploadId = stringField(body, 'uploadId');
+  const filename = stringField(body, 'filename');
+
+  if (uploadId === null || filename === null) {
+    throw new UploadError('uploadId and filename are required.', 400, 'bad_request');
+  }
+
+  const { job } = await completeUpload({
+    userId,
+    uploadId,
+    filename,
+    resultFormat: readResultFormat(body['format']),
+  });
+
+  return job;
+}

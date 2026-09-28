@@ -1,5 +1,4 @@
 import 'server-only';
-import { isAbsolute, resolve } from 'node:path';
 
 /**
  * Every environment knob in one place, read once at module load so a typo in
@@ -17,25 +16,12 @@ function intEnv(name: string, fallback: number): number {
   return Math.floor(value);
 }
 
-/**
- * Uploaded inputs and generated result files.
- *
- * A relative value is anchored at the repo root, not at the process's working
- * directory. The worker writes the result file and this app serves it, and
- * `./data` would otherwise mean `apps/web/data` here and `apps/worker/data`
- * there — a mismatch that stays invisible until a download 410s on a file that
- * exists one directory over. `apps/worker/src/config.ts` does the same.
+/*
+ * Where uploads and results live is no longer configured here. This app runs
+ * on Vercel and the worker on Render, so there is no directory both can see —
+ * both go through @ev/storage instead, which reads its own environment
+ * (`S3_BUCKET` and friends, or `DATA_DIR` for the local driver). See DEPLOY.md.
  */
-export const DATA_DIR = (() => {
-  const configured = process.env.DATA_DIR ?? './data';
-  if (isAbsolute(configured)) return configured;
-
-  // `next.config.ts` normally absolutises this before any route runs. This
-  // fallback anchors on the working directory, which Next guarantees is the
-  // app directory — not `import.meta.url`, which in a bundled server chunk
-  // points into `.next/server` and would resolve somewhere meaningless.
-  return resolve(process.cwd(), '..', '..', configured);
-})();
 
 /**
  * Hard ceiling on an upload. Enforced while streaming, not from
@@ -88,7 +74,7 @@ export const LEGACY_OWNER_USER_ID =
  */
 export const SIGNUP_CREDITS = (() => {
   const raw = process.env.SIGNUP_CREDITS;
-  if (raw === undefined || raw.trim() === '') return 250;
+  if (raw === undefined || raw.trim() === '') return 25;
 
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {

@@ -3,11 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "// packageManager": "pinned so Vercel and Render resolve the same pnpm through corepack rather than guessing",
+  "packageManager": "pnpm@11.15.1",
+  "// engines": "the worker runs its .ts files through Node's own type stripping, which is on by default from 22.18",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.18"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/db packages/pipeline",
+    "build": "tsc -b packages/core packages/db packages/pipeline packages/storage",
+    "// build:web": "what Vercel runs — the app imports the packages' built output, so they have to exist first",
+    "build:web": "pnpm run build && pnpm --filter @ev/web build",
     "test": "pnpm -r test",
     "// typecheck": "packages are project references, so their declarations must exist before dependents can be checked",
     "typecheck": "pnpm run build && pnpm -r typecheck",

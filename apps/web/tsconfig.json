@@ -34,6 +34,9 @@
       ],
       "@ev/db": [
         "../../packages/db/src/index.ts"
+      ],
+      "@ev/storage": [
+        "../../packages/storage/src/index.ts"
       ]
     },
     "esModuleInterop": true

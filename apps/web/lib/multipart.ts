@@ -1,6 +1,6 @@
 import 'server-only';
 
-import type { WriteStream } from 'node:fs';
+import type { Writable } from 'node:stream';
 
 /**
  * A streaming multipart/form-data reader.
@@ -32,8 +32,14 @@ export interface PartInfo {
 }
 
 export interface MultipartOptions {
-  /** Called once, when the file part's headers are known and before any bytes. */
-  openFile: (info: PartInfo) => Promise<WriteStream> | WriteStream;
+  /**
+   * Called once, when the file part's headers are known and before any bytes.
+   *
+   * Any `Writable`, not a file stream: since the split the bytes go to object
+   * storage through a `PassThrough`, and on a laptop to a file. This parser
+   * cares only that something accepts them with backpressure.
+   */
+  openFile: (info: PartInfo) => Promise<Writable> | Writable;
   /** Hard ceiling on the file part, enforced as bytes arrive. */
   maxFileBytes: number;
 }
@@ -90,7 +96,7 @@ export async function readMultipart(
   let partInfo: PartInfo | null = null;
   let fieldChunks: Buffer[] = [];
   let fieldBytes = 0;
-  let sink = null as WriteStream | null;
+  let sink = null as Writable | null;
   let fileBytes = 0;
 
   const reader = body.getReader();
@@ -325,7 +331,7 @@ function quotedParam(header: string, param: string): string | null {
  * internal queue and the memory we moved off the request body reappears inside
  * the file stream.
  */
-function write(stream: WriteStream, chunk: Buffer): Promise<void> {
+function write(stream: Writable, chunk: Buffer): Promise<void> {
   return new Promise((resolve, reject) => {
     const ok = stream.write(chunk, (error) => {
       if (error) reject(error);
@@ -350,7 +356,7 @@ function write(stream: WriteStream, chunk: Buffer): Promise<void> {
   });
 }
 
-function endStream(stream: WriteStream): Promise<void> {
+function endStream(stream: Writable): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => reject(error);
     stream.once('error', onError);

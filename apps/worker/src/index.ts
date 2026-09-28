@@ -1,5 +1,6 @@
-import { mkdir } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { createServer } from 'node:http';
+import { mkdir, rm } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { EmailValidator, MemoryDomainCache, TieredDomainCache } from '@ev/core';
 import {
   PostgresDomainCache,
@@ -10,7 +11,8 @@ import {
   purgeStaleDomainCache,
   type Job,
 } from '@ev/db';
-import { processFile, resultFileExtension } from '@ev/pipeline';
+import { processFile, resultFileExtension, type ResultFormat } from '@ev/pipeline';
+import { getStorage, isStorageKey, resultKey } from '@ev/storage';
 import { config } from './config.ts';
 import { refreshDisposableList } from './disposable-refresh.ts';
 import { log } from './log.ts';
@@ -23,11 +25,24 @@ import { log } from './log.ts';
  * make either finish sooner — it would just make both slower and double the
  * memory. Scale by running more worker processes when there is more than one
  * machine, not by widening this loop.
+ *
+ * It no longer shares a disk with the web app — that one runs on Vercel, this
+ * one on Render — so a job arrives as a key rather than a path. The file is
+ * fetched into scratch space, processed exactly as before, and the result goes
+ * back to the bucket before the job is marked complete. See `runJob`.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const queue = getQueue();
+const storage = getStorage();
+
+/** What the result object is served as when the browser is redirected to it. */
+const RESULT_CONTENT_TYPES: Record<ResultFormat, string> = {
+  csv: 'text/csv; charset=utf-8',
+  json: 'application/json; charset=utf-8',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
 
 const validator = new EmailValidator({
   cache: new TieredDomainCache(
@@ -51,9 +66,25 @@ async function runJob(job: Job): Promise<void> {
   const abort = new AbortController();
   currentJob = { id: job.id, abort };
 
-  const outputPath =
-    job.outputPath ?? join(config.dataDir, 'results', `${job.id}${resultFileExtension(job.resultFormat)}`);
-  await mkdir(dirname(outputPath), { recursive: true });
+  /*
+   * Scratch, not storage. @ev/pipeline reads and writes paths because it
+   * streams through files far larger than memory; a network stream in the
+   * middle of that would turn a dropped connection at row nine million into an
+   * unrecoverable job. So the input is fetched down, the result is written
+   * locally, and the bucket sees each of them exactly once. The whole
+   * directory goes in `finally`.
+   */
+  const workspace = join(config.scratchDir, job.id);
+  const inputPath = join(workspace, `input${extname(job.inputPath)}`);
+
+  const extension = resultFileExtension(job.resultFormat);
+  const outputPath = join(workspace, `result${extension}`);
+  // Derived from the job id rather than read off the row: a retry must
+  // overwrite the half-written result of the attempt before it, not leave it
+  // orphaned in the bucket under a key nothing will ever look for again.
+  const outputKey = resultKey(job.id, extension);
+
+  await mkdir(workspace, { recursive: true });
 
   // Progress writes are cheap but not free, and a big job would otherwise
   // hammer the database with them. The heartbeat rides along with the
@@ -122,8 +153,10 @@ async function runJob(job: Job): Promise<void> {
   log.info('job.start', { jobId: job.id, file: job.originalFilename });
 
   try {
+    await storage.fetchToFile(job.inputPath, inputPath);
+
     const { summary, column, format } = await processFile({
-      inputPath: job.inputPath,
+      inputPath,
       outputPath,
       format: job.resultFormat,
       validator,
@@ -153,7 +186,18 @@ async function runJob(job: Job): Promise<void> {
     // uncharged tail is revenue that silently never happened.
     await chargeTo(processedRows);
 
-    await queue.complete(job.id, summary, { outputPath, processedRows });
+    /*
+     * Uploaded before the row says 'completed', and that order is the whole
+     * point. Mark it complete first and a crash in between leaves a job the
+     * dashboard offers a download for and the bucket has never heard of. This
+     * way the worst case is a result object whose job is still 'running',
+     * which the retry overwrites.
+     */
+    await storage.sendFile(outputKey, outputPath, {
+      contentType: RESULT_CONTENT_TYPES[job.resultFormat],
+    });
+
+    await queue.complete(job.id, summary, { outputPath: outputKey, processedRows });
 
     const seconds = Math.round((Date.now() - startedAt) / 1000);
     log.info('job.done', {
@@ -210,6 +254,11 @@ async function runJob(job: Job): Promise<void> {
     log.error('job.failed', { jobId: job.id, error: message });
   } finally {
     currentJob = null;
+    // Someone else's list, sitting on a container's disk with nothing left to
+    // read it. It goes whether the job succeeded, failed or was requeued.
+    await rm(workspace, { recursive: true, force: true }).catch((error: unknown) => {
+      log.warn('job.scratch_cleanup_failed', { jobId: job.id, error: String(error) });
+    });
   }
 }
 
@@ -235,6 +284,23 @@ async function workLoop(): Promise<void> {
 }
 
 /**
+ * How the retention sweep destroys one object.
+ *
+ * The `isStorageKey` branch is about rows written before the two halves stopped
+ * sharing a disk: those hold an absolute path on a machine that no longer
+ * exists, so there is nothing to delete and never will be. Reporting that as a
+ * failure would make the sweep keep the row and retry it every hour forever, so
+ * it is reported as gone — which, as far as any bucket is concerned, it is.
+ */
+async function removeStoredObject(key: string): Promise<void> {
+  if (!isStorageKey(key)) {
+    log.warn('retention.unremovable_key', { key });
+    return;
+  }
+  await storage.remove(key);
+}
+
+/**
  * Housekeeping that has nothing to do with any one job: expired data goes
  * away (feature 24), jobs abandoned by a dead worker come back to the queue,
  * and the disposable-domain list stays current (feature 8).
@@ -250,9 +316,13 @@ function startMaintenance(): NodeJS.Timeout[] {
         });
       }
 
-      const retention = await deleteExpiredJobs({ logger: { info: log.info } });
+      // @ev/db does not know what a bucket is, so the sweep is handed the one
+      // thing it needs: how to destroy an object.
+      const retention = await deleteExpiredJobs(removeStoredObject, {
+        logger: { info: log.info },
+      });
       if (retention.jobs > 0) {
-        log.info('retention.deleted', { jobs: retention.jobs, files: retention.files.deleted });
+        log.info('retention.deleted', { jobs: retention.jobs, objects: retention.objects.deleted });
       }
 
       const purged = await purgeStaleDomainCache(config.domainCacheTtlDays * 2);
@@ -296,16 +366,50 @@ function installShutdown(timers: NodeJS.Timeout[]): void {
   process.on('SIGTERM', () => stop('SIGTERM'));
 }
 
+/**
+ * A health endpoint, and only when the host asks for one by setting PORT.
+ *
+ * A Render background worker does not set it and gets no server. A Render web
+ * service does, and is killed at deploy if nothing binds the port — which is
+ * what lets this same process run on the free tier, where background workers
+ * are not offered. It reports liveness, not readiness: the honest answer to
+ * "is the queue healthy" lives in the jobs table, not in this process.
+ */
+function startHealthServer(): void {
+  if (config.healthPort === null) return;
+
+  const server = createServer((request, response) => {
+    if (request.url === '/health' || request.url === '/') {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ status: 'ok', workerId: config.workerId }));
+      return;
+    }
+    response.writeHead(404).end();
+  });
+
+  // Never a reason to take the worker down with it.
+  server.on('error', (error) => log.error('health.failed', { error: String(error) }));
+  server.listen(config.healthPort, () => log.info('health.listening', { port: config.healthPort }));
+  server.unref();
+}
+
 async function main(): Promise<void> {
-  await mkdir(join(config.dataDir, 'results'), { recursive: true });
+  // Anything in here belongs to a job that died with the last process. There
+  // is nothing to resume from it — the durable copy is in the bucket — and it
+  // is somebody's list, so it goes before the loop starts.
+  await rm(config.scratchDir, { recursive: true, force: true }).catch(() => undefined);
+  await mkdir(config.scratchDir, { recursive: true });
+
   await refreshDisposableList();
 
+  startHealthServer();
   const timers = startMaintenance();
   installShutdown(timers);
 
   log.info('worker.ready', {
     workerId: config.workerId,
-    dataDir: config.dataDir,
+    storage: storage.kind,
+    scratchDir: config.scratchDir,
     dnsServers: config.dnsServers.length > 0 ? config.dnsServers : 'system',
     dnsConcurrency: config.dnsConcurrency,
   });

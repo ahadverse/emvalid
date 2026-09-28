@@ -13,6 +13,7 @@
   "dependencies": {
     "@ev/core": "workspace:*",
     "@ev/db": "workspace:*",
-    "@ev/pipeline": "workspace:*"
+    "@ev/pipeline": "workspace:*",
+    "@ev/storage": "workspace:*"
   }
 }

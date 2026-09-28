@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { describe, it } from 'node:test';
 import type { DomainInfo } from '@ev/core';
 import { API_KEY_PREFIX_LENGTH, apiKeyPrefix, generateApiKey, hashApiKey } from '../src/api-keys.ts';
 import { DEFAULT_TTL_MS, domainInfoToRow, isFresh, rowToDomainInfo } from '../src/domain-cache.ts';
 import { DEFAULT_RETENTION_DAYS, intervalLiteral, retentionExpiry } from '../src/queue.ts';
-import { daysAgo, removeFiles } from '../src/retention.ts';
+import { daysAgo, removeObjects } from '../src/retention.ts';
 
 /**
  * Everything here is pure or touches only the filesystem. The queries
@@ -101,42 +98,39 @@ describe('domain cache mapping', () => {
 });
 
 describe('retention', () => {
-  let dir = '';
-
-  before(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'ev-db-'));
-  });
-
-  after(async () => {
-    await rm(dir, { recursive: true, force: true });
-  });
-
   it('computes an instant N days back', () => {
     const now = new Date('2026-03-10T00:00:00Z');
     assert.equal(daysAgo(3, now).toISOString(), '2026-03-07T00:00:00.000Z');
   });
 
-  it('deletes the files it is given', async () => {
-    const path = join(dir, 'result.csv');
-    await writeFile(path, 'x', 'utf8');
+  it('removes every key it is given', async () => {
+    const removed: string[] = [];
 
-    const result = await removeFiles([path]);
-    assert.equal(result.deleted, 1);
-    assert.equal(result.failed.length, 0);
-    await assert.rejects(readFile(path));
-  });
+    const result = await removeObjects(['uploads/a/input.csv', 'results/a.csv'], async (key) => {
+      removed.push(key);
+    });
 
-  it('treats an already-missing file as success', async () => {
-    // An interrupted earlier sweep is the likeliest reason for this, and the
-    // desired end state is the same either way.
-    const result = await removeFiles([join(dir, 'never-existed.csv')]);
-    assert.equal(result.deleted, 1);
+    assert.deepEqual(removed, ['uploads/a/input.csv', 'results/a.csv']);
+    assert.equal(result.deleted, 2);
     assert.equal(result.failed.length, 0);
   });
 
-  it('ignores null and empty paths — a failed job has no output file', async () => {
-    const result = await removeFiles([null, '']);
+  it('ignores null and empty keys — a failed job has no result object', async () => {
+    const result = await removeObjects([null, ''], async () => {
+      assert.fail('nothing should have been removed');
+    });
+
     assert.equal(result.deleted, 0);
     assert.equal(result.failed.length, 0);
+  });
+
+  it('collects a failure instead of abandoning the rest of the sweep', async () => {
+    // One unreachable object must not keep every later job's data alive.
+    const result = await removeObjects(['results/bad.csv', 'results/good.csv'], async (key) => {
+      if (key === 'results/bad.csv') throw new Error('access denied');
+    });
+
+    assert.equal(result.deleted, 1);
+    assert.deepEqual(result.failed, [{ key: 'results/bad.csv', error: 'access denied' }]);
   });
 });

@@ -1,0 +1,62 @@
+# Render Blueprint — the worker half of the deployment.
+#
+# The web app is not here: it runs on Vercel (see vercel.json). What lives on
+# Render is the one process that cannot be serverless — a loop that holds a
+# single job for as long as it takes, which on a ten-million-row file is hours.
+#
+# No disk is attached, on purpose. A Render disk mounts to exactly one service,
+# so it could never be the thing the web app and this worker both read; they
+# share an S3-compatible bucket instead, and everything this process writes
+# locally is scratch it deletes itself. See DEPLOY.md.
+#
+# `type: worker` needs a paid instance — Render does not offer background
+# workers on the free tier. DEPLOY.md explains the free-tier shape, which is
+# this same process as `type: web` with a health endpoint.
+
+services:
+  - type: worker
+    name: emvalid-worker
+    runtime: node
+    plan: starter
+    # Closest region to Bangladesh. Move it next to the database, not next to
+    # the users — this service has no users, it has a queue.
+    region: singapore
+    branch: main
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm run build
+    startCommand: pnpm --filter @ev/worker start
+
+    envVars:
+      # Node's type stripping is on by default from 22.18, which is how the
+      # worker runs its .ts files with no build step of its own.
+      - key: NODE_VERSION
+        value: 22.20.0
+
+      # Everything below is set in the Render dashboard, never in this file:
+      # `sync: false` is what keeps a secret out of the repository.
+      - key: DATABASE_URL
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+
+      # One process, one pool. The web app's pool is sized separately — see
+      # DEPLOY.md, where the two have to add up to less than the database's
+      # connection ceiling.
+      - key: DATABASE_POOL_MAX
+        value: "10"
+
+      # Simultaneous DNS queries. 500 is right against a local resolver and
+      # far too many against a public one, which is what this instance has:
+      # push it up only if you put unbound in front of it.
+      - key: DNS_CONCURRENCY
+        value: "100"
+      - key: DNS_SERVERS
+        value: 1.1.1.1,8.8.8.8

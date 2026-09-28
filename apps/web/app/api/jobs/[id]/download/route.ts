@@ -1,22 +1,23 @@
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import { extname, relative, resolve } from 'node:path';
-import { Readable } from 'node:stream';
-import { DATA_DIR } from '@/lib/config';
+import { extname } from 'node:path';
 import { guardUi, jsonError, withErrors } from '@/lib/http';
-import { getJobOutputPath } from '@/lib/jobs';
+import { getJobOutputKey } from '@/lib/jobs';
+import { getStorage, isStorageKey } from '@/lib/storage';
 
 /**
  * Feature 17 — download the result file.
  *
- * GET /api/jobs/:id/download → text/csv, streamed
+ * GET /api/jobs/:id/download → 302 to a short-lived signed URL.
  *
- * Streamed rather than read: the result of a ten-million-row job is larger
- * than the input, and buffering it would undo everything the upload path does.
+ * A redirect rather than a proxied stream. The result of a ten-million-row job
+ * is larger than the input, and a serverless function that streamed it would
+ * pay for every byte twice and time out before the slow half of them arrived.
+ * The signed URL expires in minutes and names one object, so handing it to the
+ * browser gives away nothing a download would not have.
  *
- * This is the most sensitive route in the app — the response body is the
- * customer's list. It was open to anyone holding a job id before v2; now the
- * lookup is scoped to the signed-in owner, so another account's id is a 404.
+ * This is still the most sensitive route in the app — what is on the other end
+ * of that redirect is the customer's list. The lookup is scoped to the
+ * signed-in owner, so another account's job id is a 404, and the key is checked
+ * before it is signed.
  */
 
 export const runtime = 'nodejs';
@@ -32,47 +33,49 @@ export const GET = withErrors(async (request: Request, context: Context) => {
 
   const { id } = await context.params;
 
-  const output = await getJobOutputPath(guard.user.id, id);
+  const output = await getJobOutputKey(guard.user.id, id);
   if (output === null) {
-    return jsonError('not_found', 'No result file for this job.', 404);
+    return jsonError('not_found', 'No result file for this job.', 404, guard.headers);
   }
 
-  // The path comes from our own row, but a path traversal here would serve any
-  // file on the box, so it is verified rather than trusted.
-  const root = resolve(DATA_DIR);
-  const path = resolve(output.path);
-  const within = relative(root, path);
-  if (within.startsWith('..') || within === '') {
-    console.error('job output path escapes DATA_DIR', { jobId: id });
-    return jsonError('not_found', 'No result file for this job.', 404);
+  /*
+   * The key comes from our own row, but signing whatever it holds would make
+   * one bad write anywhere upstream into a way to read any object in the
+   * bucket. It is verified rather than trusted — which also quarantines rows
+   * written before the move to object storage, whose absolute filesystem paths
+   * point at a machine that no longer exists.
+   */
+  if (!isStorageKey(output.key)) {
+    console.error('job output key is not a storage key', { jobId: id });
+    return jsonError('gone', 'The result file is no longer available.', 410, guard.headers);
   }
 
-  let size: number;
-  try {
-    const info = await stat(path);
-    if (!info.isFile()) throw new Error('not a file');
-    size = info.size;
-  } catch {
-    // Retention (feature 24) may have removed it, which is not an error the
-    // user needs a stack trace for.
-    return jsonError('gone', 'The result file has been deleted by data retention.', 410);
+  const storage = getStorage();
+
+  // Asked before signing so retention (feature 24) produces a 410 the UI can
+  // explain, rather than a redirect to a 404 from the bucket.
+  if ((await storage.head(output.key)) === null) {
+    return jsonError(
+      'gone',
+      'The result file has been deleted by data retention.',
+      410,
+      guard.headers,
+    );
   }
 
-  const stream = Readable.toWeb(createReadStream(path)) as ReadableStream<Uint8Array>;
+  // Feature 32 — the stored object already carries the format the job was run
+  // with (worker/src/index.ts picks the extension from `job.resultFormat`), so
+  // reading it back here is the one place that needs to know.
+  const format = extname(output.key).slice(1);
 
-  // Feature 32 — the file on disk already carries the format the job was run
-  // with (worker/src/index.ts picks the extension from `job.resultFormat`),
-  // so reading it back here is the one place that needs to know, rather than
-  // this route also taking a dependency on the job row's format column.
-  const format = extname(path).slice(1);
+  const url = await storage.presignDownload(output.key, {
+    filename: resultFilename(output.originalFilename, format),
+    contentType: CONTENT_TYPES[format] ?? 'application/octet-stream',
+  });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': CONTENT_TYPES[format] ?? 'application/octet-stream',
-      'Content-Length': String(size),
-      'Content-Disposition': contentDisposition(resultFilename(output.originalFilename, format)),
-      'Cache-Control': 'no-store',
-    },
+  return new Response(null, {
+    status: 302,
+    headers: { ...guard.headers, Location: url, 'Cache-Control': 'no-store' },
   });
 });
 
@@ -85,14 +88,4 @@ const CONTENT_TYPES: Record<string, string> = {
 function resultFilename(original: string, format: string): string {
   const base = original.replace(/\.[^.]+$/, '');
   return `${base || 'results'}-verified.${format}`;
-}
-
-/**
- * Two filenames, on purpose: a stripped ASCII one every client understands,
- * and an RFC 5987 one for anything non-ASCII. The strip is also what stops a
- * quote or a newline in a user-supplied name from injecting a header.
- */
-function contentDisposition(filename: string): string {
-  const ascii = filename.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }

@@ -35,7 +35,7 @@ if (process.env.DATA_DIR !== undefined && !isAbsolute(process.env.DATA_DIR)) {
 const config: NextConfig = {
   // The workspace packages ship TypeScript source, not a build. Next has to
   // compile them itself.
-  transpilePackages: ['@ev/core', '@ev/db'],
+  transpilePackages: ['@ev/core', '@ev/db', '@ev/storage'],
 
   // pnpm workspaces put node_modules above the app; without this Next guesses
   // the wrong root and traces the wrong files into the standalone output.
@@ -45,7 +45,17 @@ const config: NextConfig = {
 
   // @ev/db holds a connection pool keyed on globalThis. Bundling `pg` would
   // give each bundle chunk its own copy of the driver and defeat that.
-  serverExternalPackages: ['pg'],
+  //
+  // The AWS SDK is here for a duller reason: it resolves credentials and
+  // regions through conditional requires that a bundler cannot follow, and
+  // bundling it produces a build that only fails once a real bucket is
+  // configured.
+  serverExternalPackages: [
+    'pg',
+    '@aws-sdk/client-s3',
+    '@aws-sdk/lib-storage',
+    '@aws-sdk/s3-request-presigner',
+  ],
 };
 
 export default config;

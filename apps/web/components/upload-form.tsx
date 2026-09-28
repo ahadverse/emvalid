@@ -9,9 +9,21 @@ import { formatBytes } from '@/lib/format';
 /**
  * Feature 14 — drag a list in, get a job out.
  *
- * Uploads over XMLHttpRequest rather than fetch for one reason: fetch cannot
- * report upload progress, and on a 600 MB file a UI that says nothing for four
- * minutes reads as broken.
+ * Three requests, not one:
+ *
+ *   1. ask the app where to put the file    (POST /api/upload/presign)
+ *   2. PUT the bytes at what it says        (the bucket, directly)
+ *   3. tell the app they landed             (POST /api/upload/complete)
+ *
+ * Step 2 skips our servers entirely, which is not a nicety: the app runs as
+ * serverless functions whose request body is capped at a few megabytes, and a
+ * 600 MB list is the ordinary case. In development the same three steps run
+ * against a local directory — see the storage driver — so this file has one
+ * code path and not a production one and a laptop one.
+ *
+ * Step 2 goes over XMLHttpRequest rather than fetch for one reason: fetch
+ * cannot report upload progress, and on a 600 MB file a UI that says nothing
+ * for four minutes reads as broken.
  */
 
 const ACCEPT = '.csv,.tsv,.txt,.xlsx,.xls';
@@ -57,57 +69,35 @@ export function UploadForm() {
     choose(event.target.files?.item(0) ?? null);
   }
 
-  function upload(): void {
+  async function upload(): Promise<void> {
     if (file === null || uploading) return;
 
     setFailure(null);
     setProgress(0);
 
-    const body = new FormData();
-    body.append('file', file, file.name);
-    body.append('format', resultFormat);
+    try {
+      const ticket = await postJson<UploadTicket>('/api/upload/presign', {
+        filename: file.name,
+        bytes: file.size,
+      });
 
-    const request = new XMLHttpRequest();
-    request.open('POST', '/api/upload');
+      await putFile(ticket, file, setProgress);
 
-    request.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable) setProgress(Math.round((event.loaded / event.total) * 100));
-    });
+      // The bar can no longer move from here, and the rest — enqueueing the
+      // job — is quick, so `handedOff` switches the label to "Processing…".
+      setProgress(100);
 
-    request.addEventListener('load', () => {
-      let parsed: unknown = null;
-      try {
-        parsed = JSON.parse(request.responseText);
-      } catch {
-        // Falls through to the generic message below.
-      }
+      const queued = await postJson<{ jobId: string }>('/api/upload/complete', {
+        uploadId: ticket.uploadId,
+        filename: file.name,
+        format: resultFormat,
+      });
 
-      if (request.status >= 200 && request.status < 300) {
-        const jobId = (parsed as { jobId?: string } | null)?.jobId;
-        if (typeof jobId === 'string') {
-          router.push(`/jobs/${jobId}`);
-          return;
-        }
-      }
-
+      router.push(`/jobs/${queued.jobId}`);
+    } catch (error) {
       setProgress(null);
-      setFailure(
-        (parsed as { error?: { message?: string } } | null)?.error?.message ??
-          `Upload failed (HTTP ${request.status}).`,
-      );
-    });
-
-    request.addEventListener('error', () => {
-      setProgress(null);
-      setFailure('The connection dropped during upload.');
-    });
-
-    request.addEventListener('abort', () => {
-      setProgress(null);
-      setFailure('Upload cancelled.');
-    });
-
-    request.send(body);
+      setFailure(error instanceof Error ? error.message : 'Upload failed.');
+    }
   }
 
   return (
@@ -115,7 +105,7 @@ export function UploadForm() {
       <div className="border-b border-line px-5 py-4">
         <h2 className="text-[15px] font-semibold tracking-tight text-ink">Verify a list</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-muted">
-          The file streams straight to disk, so size is not the limit — time is.
+          The file goes straight to storage, so size is not the limit — time is.
         </p>
       </div>
 
@@ -234,7 +224,7 @@ export function UploadForm() {
                 )}
                 <button
                   type="button"
-                  onClick={upload}
+                  onClick={() => void upload()}
                   disabled={uploading}
                   className={buttonClass({ size: 'sm' })}
                 >
@@ -281,4 +271,76 @@ export function UploadForm() {
       </div>
     </Card>
   );
+}
+
+/** What `/api/upload/presign` hands back: where to send the bytes. */
+interface UploadTicket {
+  uploadId: string;
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * The app's own endpoints, which answer `{ error: { code, message } }` when
+ * they refuse. Anything else — including a proxy's HTML error page — becomes a
+ * status-code message rather than a blank failure.
+ */
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const parsed: unknown = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = (parsed as { error?: { message?: string } } | null)?.error?.message;
+    throw new Error(message ?? `Upload failed (HTTP ${response.status}).`);
+  }
+
+  return (parsed ?? {}) as T;
+}
+
+/**
+ * The one request that does not go to our servers. XHR, because this is the
+ * leg that takes minutes and fetch cannot report its progress.
+ */
+function putFile(
+  ticket: UploadTicket,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open(ticket.method, ticket.url);
+
+    // Whatever the signature covered has to arrive with the request, or the
+    // bucket rejects it as a mismatch.
+    for (const [name, value] of Object.entries(ticket.headers)) {
+      request.setRequestHeader(name, value);
+    }
+
+    request.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    });
+
+    request.addEventListener('load', () => {
+      if (request.status >= 200 && request.status < 300) {
+        resolve();
+        return;
+      }
+      // A failure here comes from storage, not from us, so there is no message
+      // worth showing — the status is the whole signal.
+      reject(new Error(`Storage refused the upload (HTTP ${request.status}).`));
+    });
+
+    // The commonest cause by far is a bucket whose CORS rules do not allow
+    // PUT from this origin, which the browser reports as an opaque failure.
+    request.addEventListener('error', () => reject(new Error('The connection dropped during upload.')));
+    request.addEventListener('abort', () => reject(new Error('Upload cancelled.')));
+
+    request.send(file);
+  });
 }

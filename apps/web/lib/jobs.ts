@@ -69,17 +69,17 @@ export async function getJob(userId: string, jobId: string): Promise<JobRecord |
   return toRecord(job);
 }
 
-/** The download route needs the path itself, which never leaves the server. */
-export async function getJobOutputPath(
+/** The download route needs the storage key itself, which never leaves the server. */
+export async function getJobOutputKey(
   userId: string,
   jobId: string,
-): Promise<{ path: string; originalFilename: string } | null> {
+): Promise<{ key: string; originalFilename: string } | null> {
   const job = await getQueue().get(jobId);
 
   if (job === null || job.userId !== userId) return null;
   if (job.status !== 'completed' || job.outputPath === null) return null;
 
-  return { path: job.outputPath, originalFilename: job.originalFilename };
+  return { key: job.outputPath, originalFilename: job.originalFilename };
 }
 
 /**

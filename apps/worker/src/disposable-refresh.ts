@@ -26,7 +26,7 @@ const SOURCE_URL =
 /** Below this the download is junk, whatever the HTTP status said. */
 const MIN_PLAUSIBLE_ENTRIES = 1000;
 
-const cachePath = () => join(config.dataDir, 'cache', 'disposable-domains.txt');
+const cachePath = () => join(config.cacheDir, 'disposable-domains.txt');
 
 export async function refreshDisposableList(): Promise<void> {
   if (process.env.DISPOSABLE_REFRESH === 'off') {

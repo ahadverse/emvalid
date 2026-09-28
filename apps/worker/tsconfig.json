@@ -6,7 +6,8 @@
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/db" },
-    { "path": "../../packages/pipeline" }
+    { "path": "../../packages/pipeline" },
+    { "path": "../../packages/storage" }
   ],
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
