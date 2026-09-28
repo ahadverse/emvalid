@@ -10,14 +10,14 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/db packages/pipeline packages/storage",
-    "// build:web": "what Vercel runs — the app imports the packages' built output, so they have to exist first",
+    "build": "node api.js && tsc -b packages/core packages/db packages/pipeline packages/storage",
+    "// build:web": "what Vercel runs \u2014 the app imports the packages' built output, so they have to exist first",
     "build:web": "pnpm run build && pnpm --filter @ev/web build",
     "test": "pnpm -r test",
     "// typecheck": "packages are project references, so their declarations must exist before dependents can be checked",
     "typecheck": "pnpm run build && pnpm -r typecheck",
-    "// dev": "web alone only accepts uploads — nothing processes a job without the worker, hence both, in parallel",
-    "dev": "pnpm --parallel --filter @ev/web --filter @ev/worker dev"
+    "// dev": "web alone only accepts uploads \u2014 nothing processes a job without the worker, hence both, in parallel",
+    "dev": "node api.js && pnpm --parallel --filter @ev/web --filter @ev/worker dev"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
